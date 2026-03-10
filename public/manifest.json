@@ -1,0 +1,16 @@
+{
+  "short_name": "Ассистент",
+  "name": "Карманный ассистент",
+  "description": "Личный органайзер: календарь, дневник, привычки, топ-списки, дни рождения",
+  "icons": [
+    { "src": "icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any maskable" },
+    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any maskable" }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0f0f13",
+  "background_color": "#0f0f13",
+  "lang": "ru",
+  "categories": ["productivity", "lifestyle"]
+}
