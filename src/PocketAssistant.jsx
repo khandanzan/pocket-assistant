@@ -674,7 +674,7 @@ function CalendarSection({ data, setData }) {
     const [, sy, sm, sd] = selected.match(/(\d+)-(\d+)-(\d+)/);
     const dayBirthdays = getBirthdaysOnDay(data.birthdays, parseInt(sy), parseInt(sm) - 1, parseInt(sd));
     return (
-      <div>
+      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
         <DayView
           date={selected}
           events={dayEvents}
@@ -712,7 +712,7 @@ function CalendarSection({ data, setData }) {
 
   if (calView === "week" && weekStart) {
     return (
-      <div>
+      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
         <WeekView
           weekStart={weekStart}
           events={data.events}
@@ -725,7 +725,7 @@ function CalendarSection({ data, setData }) {
 
   // Month view
   return (
-    <div>
+      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
         <button onClick={() => setNow(n => n.month === 0 ? { year: n.year - 1, month: 11 } : { ...n, month: n.month - 1 })}
@@ -856,7 +856,7 @@ function DiarySection({ data, setData }) {
   }
 
   return (
-    <div>
+    <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "16px" }}>Записи</span>
         <Btn small onClick={() => setShowModal(true)}>+ Запись</Btn>
@@ -973,7 +973,7 @@ function TopListsSection({ data, setData }) {
   ];
 
   return (
-    <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }}>
+    <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       {/* List tabs */}
       <div style={{ display: "flex", gap: "8px", overflowX: "auto", marginBottom: "16px", paddingBottom: "4px", WebkitOverflowScrolling: "touch" }}>
         {data.topLists.map(l => (
@@ -1315,7 +1315,7 @@ function HabitsSection({ data, setData }) {
   }
 
   return (
-    <div>
+      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "16px" }}>Трекер привычек</span>
         <Btn small onClick={() => setShowModal(true)}>+ Привычка</Btn>
@@ -1516,7 +1516,7 @@ function BirthdaysSection({ data, setData }) {
   const todayMMDD = String(_now.getMonth() + 1).padStart(2, "0") + "-" + String(_now.getDate()).padStart(2, "0");
 
   return (
-    <div>
+    <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       {/* Notification permission banner */}
       {notifPerm !== "granted" && notifPerm !== "unsupported" && (
         <div style={{ background: `${COLORS.orange}22`, border: `1px solid ${COLORS.orange}55`, borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2023,10 +2023,12 @@ export default function App() {
       fontFamily: "'Segoe UI', system-ui, sans-serif",
       display: "flex",
       flexDirection: "column",
-      height: "100dvh",          // exact screen height, no overflow
+      height: "100dvh",
+      width: "100%",
       maxWidth: "480px",
       margin: "0 auto",
-      overflow: "hidden",        // prevent any outer scroll
+      overflow: "hidden",
+      position: "relative",
     }}>
       {/* Header — pinned to top, respects status bar */}
       <div style={{
@@ -2063,10 +2065,12 @@ export default function App() {
         overflowY: "auto",
         overflowX: "hidden",
         WebkitOverflowScrolling: "touch",
-        padding: "16px 16px 16px 16px",
+        padding: "16px",
         width: "100%",
+        maxWidth: "100%",
         boxSizing: "border-box",
         minWidth: 0,
+        contain: "layout style",
       }}>
         {tab === "calendar" && <CalendarSection data={data} setData={setData} />}
         {tab === "diary" && <DiarySection data={data} setData={setData} />}
