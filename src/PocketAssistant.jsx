@@ -1527,6 +1527,241 @@ function getAge(dateStr) {
   return age;
 }
 
+
+// ─── HOME SECTION ─────────────────────────────────────────────────────────────
+
+function HomeSection({ data, profile, setTab }) {
+  const now = new Date();
+  const todayStr = today();
+
+  // ── Upcoming events (next 7 days) ────────────────────────────────────────
+  const upcomingEvents = (data.events || [])
+    .filter(ev => ev.date >= todayStr)
+    .sort((a, b) => (a.date + (a.time || "")) > (b.date + (b.time || "")) ? 1 : -1)
+    .slice(0, 5);
+
+  // ── Habits today ────────────────────────────────────────────────────────
+  const habitsToday = (data.habits || []).map(h => ({
+    ...h,
+    done: !!h.checkins?.[todayStr],
+  }));
+  const habitsDone = habitsToday.filter(h => h.done).length;
+  const habitsTotal = habitsToday.length;
+
+  // ── Upcoming birthdays (next 30 days) ───────────────────────────────────
+  const upcomingBdays = (data.birthdays || [])
+    .map(b => {
+      const [, mm, dd] = b.date.split("-");
+      const thisYear = now.getFullYear();
+      let bday = new Date(`${thisYear}-${mm}-${dd}`);
+      if (bday < now) bday = new Date(`${thisYear + 1}-${mm}-${dd}`);
+      const daysLeft = Math.ceil((bday - now) / 86400000);
+      return { ...b, daysLeft };
+    })
+    .filter(b => b.daysLeft <= 30)
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+    .slice(0, 3);
+
+  // ── Diary streak ────────────────────────────────────────────────────────
+  const diaryDates = new Set((data.diary || []).map(e => e.date));
+  let streak = 0;
+  const d = new Date();
+  while (diaryDates.has(today(d))) { streak++; d.setDate(d.getDate() - 1); }
+
+  function today(date) {
+    const dt = date || new Date();
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+  }
+
+  // ── Greeting ─────────────────────────────────────────────────────────────
+  const hour = now.getHours();
+  const greeting = hour < 12 ? "Доброе утро" : hour < 17 ? "Добрый день" : hour < 22 ? "Добрый вечер" : "Доброй ночи";
+  const name = profile?.firstName ? `, ${profile.firstName}` : "";
+
+  const cardStyle = {
+    background: COLORS.surface,
+    borderRadius: "16px",
+    padding: "16px",
+    marginBottom: "12px",
+    border: `0.5px solid ${COLORS.border}`,
+  };
+
+  const sectionHeader = (title, emoji, tabId) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+      <div style={{ color: COLORS.text, fontWeight: 700, fontSize: "15px", letterSpacing: "-0.3px" }}>
+        {emoji} {title}
+      </div>
+      {tabId && (
+        <button onClick={() => setTab(tabId)} style={{
+          background: "none", border: "none", color: COLORS.accent,
+          fontSize: "13px", cursor: "pointer", fontFamily: "inherit", padding: 0,
+        }}>Все →</button>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
+
+      {/* Greeting */}
+      <div style={{ marginBottom: "20px", paddingTop: "4px" }}>
+        <div style={{ color: COLORS.text, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", lineHeight: 1.2 }}>
+          {greeting}{name} 👋
+        </div>
+        <div style={{ color: COLORS.fill, fontSize: "14px", marginTop: "4px" }}>
+          {now.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "12px" }}>
+        {[
+          { label: "Событий", value: upcomingEvents.length, icon: "📅", color: COLORS.blue, tab: "calendar" },
+          { label: "Привычек", value: `${habitsDone}/${habitsTotal}`, icon: "🔥", color: COLORS.orange, tab: "habits" },
+          { label: "Дни подряд", value: streak || "—", icon: "📔", color: COLORS.purple, tab: "diary" },
+        ].map(s => (
+          <button key={s.label} onClick={() => setTab(s.tab)} style={{
+            background: COLORS.surface, border: `0.5px solid ${COLORS.border}`,
+            borderRadius: "14px", padding: "14px 10px", textAlign: "center",
+            cursor: "pointer", fontFamily: "inherit",
+          }}>
+            <div style={{ fontSize: "22px", marginBottom: "6px" }}>{s.icon}</div>
+            <div style={{ color: s.color, fontWeight: 700, fontSize: "20px", letterSpacing: "-0.5px", lineHeight: 1 }}>{s.value}</div>
+            <div style={{ color: COLORS.fill, fontSize: "11px", marginTop: "4px" }}>{s.label}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Habits today */}
+      {habitsTotal > 0 && (
+        <div style={cardStyle}>
+          {sectionHeader("Привычки сегодня", "🔥", "habits")}
+          <div style={{ marginBottom: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+              <span style={{ color: COLORS.textSec, fontSize: "13px" }}>{habitsDone} из {habitsTotal} выполнено</span>
+              <span style={{ color: COLORS.fill, fontSize: "13px" }}>{habitsTotal > 0 ? Math.round(habitsDone/habitsTotal*100) : 0}%</span>
+            </div>
+            <div style={{ height: "6px", background: COLORS.card, borderRadius: "3px", overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: "3px",
+                background: habitsDone === habitsTotal && habitsTotal > 0 ? COLORS.green : COLORS.orange,
+                width: `${habitsTotal > 0 ? (habitsDone/habitsTotal*100) : 0}%`,
+                transition: "width 0.3s ease",
+              }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            {habitsToday.slice(0, 6).map(h => (
+              <div key={h.id} style={{
+                background: h.done ? `${COLORS.green}20` : COLORS.card,
+                border: `0.5px solid ${h.done ? COLORS.green : COLORS.border}`,
+                borderRadius: "20px", padding: "5px 10px",
+                fontSize: "13px", color: h.done ? COLORS.green : COLORS.textSec,
+                display: "flex", alignItems: "center", gap: "4px",
+              }}>
+                <span>{h.emoji || "🎯"}</span>
+                <span style={{ fontWeight: h.done ? 600 : 400 }}>{h.name}</span>
+                {h.done && <span style={{ fontSize: "11px" }}>✓</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming events */}
+      {upcomingEvents.length > 0 ? (
+        <div style={cardStyle}>
+          {sectionHeader("Ближайшие события", "📅", "calendar")}
+          {upcomingEvents.map((ev, i) => {
+            const evDate = new Date(ev.date + "T12:00:00");
+            const isToday = ev.date === todayStr;
+            const isTomorrow = ev.date === (() => { const d = new Date(); d.setDate(d.getDate()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+            const dateLabel = isToday ? "Сегодня" : isTomorrow ? "Завтра" : evDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+            return (
+              <div key={ev.id} style={{
+                display: "flex", alignItems: "center", gap: "12px",
+                paddingBottom: i < upcomingEvents.length - 1 ? "10px" : 0,
+                marginBottom: i < upcomingEvents.length - 1 ? "10px" : 0,
+                borderBottom: i < upcomingEvents.length - 1 ? `0.5px solid ${COLORS.border}` : "none",
+              }}>
+                <div style={{
+                  width: "40px", height: "40px", borderRadius: "10px", flexShrink: 0,
+                  background: `${ev.color || COLORS.accent}22`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "18px",
+                }}>📅</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: COLORS.text, fontSize: "14px", fontWeight: 600, letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.title}</div>
+                  <div style={{ color: COLORS.fill, fontSize: "12px", marginTop: "2px" }}>
+                    {dateLabel}{ev.time ? ` · ${ev.time}` : ""}
+                  </div>
+                </div>
+                {isToday && (
+                  <div style={{ background: `${COLORS.red}22`, color: COLORS.red, fontSize: "11px", fontWeight: 600, padding: "3px 8px", borderRadius: "6px", flexShrink: 0 }}>Сегодня</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ ...cardStyle, textAlign: "center", padding: "24px" }}>
+          {sectionHeader("Ближайшие события", "📅", "calendar")}
+          <div style={{ color: COLORS.fill, fontSize: "14px" }}>Нет предстоящих событий</div>
+          <button onClick={() => setTab("calendar")} style={{
+            marginTop: "10px", background: `${COLORS.accent}20`, border: "none",
+            color: COLORS.accent, borderRadius: "10px", padding: "8px 16px",
+            fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          }}>+ Добавить событие</button>
+        </div>
+      )}
+
+      {/* Upcoming birthdays */}
+      {upcomingBdays.length > 0 && (
+        <div style={cardStyle}>
+          {sectionHeader("Дни рождения", "🎂", "birthdays")}
+          {upcomingBdays.map((b, i) => (
+            <div key={b.id} style={{
+              display: "flex", alignItems: "center", gap: "12px",
+              paddingBottom: i < upcomingBdays.length - 1 ? "10px" : 0,
+              marginBottom: i < upcomingBdays.length - 1 ? "10px" : 0,
+              borderBottom: i < upcomingBdays.length - 1 ? `0.5px solid ${COLORS.border}` : "none",
+            }}>
+              <div style={{
+                width: "40px", height: "40px", borderRadius: "50%", flexShrink: 0,
+                background: `${COLORS.pink}22`,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px",
+              }}>🎂</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: COLORS.text, fontSize: "14px", fontWeight: 600, letterSpacing: "-0.2px" }}>{b.name}</div>
+                <div style={{ color: COLORS.fill, fontSize: "12px", marginTop: "2px" }}>
+                  {b.daysLeft === 0 ? "🎉 Сегодня!" : b.daysLeft === 1 ? "Завтра" : `Через ${b.daysLeft} дн.`}
+                </div>
+              </div>
+              <div style={{
+                color: b.daysLeft === 0 ? COLORS.pink : b.daysLeft <= 3 ? COLORS.orange : COLORS.fill,
+                fontSize: "13px", fontWeight: 600,
+              }}>
+                {b.daysLeft === 0 ? "🎉" : `${b.daysLeft}д`}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {habitsTotal === 0 && upcomingEvents.length === 0 && upcomingBdays.length === 0 && (
+        <div style={{ textAlign: "center", paddingTop: "40px" }}>
+          <div style={{ fontSize: "56px", marginBottom: "16px" }}>✨</div>
+          <div style={{ color: COLORS.text, fontWeight: 700, fontSize: "18px", letterSpacing: "-0.3px" }}>Всё готово!</div>
+          <div style={{ color: COLORS.fill, fontSize: "14px", marginTop: "8px", lineHeight: "1.6" }}>Начни добавлять события,{"
+"}привычки и дни рождения</div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
 function BirthdaysSection({ data, setData }) {
   const [showModal, setShowModal] = useState(false);
   const [notifModal, setNotifModal] = useState(null);
@@ -1995,18 +2230,18 @@ function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = fals
 
 
 const TABS = [
-  { id: "calendar", label: "Календарь", icon: "📅" },
-  { id: "diary", label: "Дневник", icon: "📔" },
-  { id: "top", label: "Топ-списки", icon: "⭐" },
-  { id: "habits", label: "Привычки", icon: "🔥" },
-  { id: "birthdays", label: "ДР", icon: "🎂" },
+  { id: "home",      label: "Главная",   icon: "🏠" },
+  { id: "calendar",  label: "Календарь", icon: "📅" },
+  { id: "diary",     label: "Дневник",   icon: "📔" },
+  { id: "habits",    label: "Привычки",  icon: "🔥" },
+  { id: "birthdays", label: "ДР",        icon: "🎂" },
 ];
 
 export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [profile, setProfile] = useState(loadProfile);
   const [screen, setScreen] = useState("loading");
-  const [tab, setTab] = useState("calendar");
+  const [tab, setTab] = useState("home");
   const [data, setDataRaw] = useState(loadData);
   const [syncing, setSyncing] = useState(false);
 
@@ -2216,6 +2451,7 @@ export default function App() {
         minWidth: 0,
         background: COLORS.bg,
       }}>
+        {tab === "home" && <HomeSection data={data} profile={profile} setTab={setTab} />}
         {tab === "calendar" && <CalendarSection data={data} setData={setData} />}
         {tab === "diary" && <DiarySection data={data} setData={setData} />}
         {tab === "top" && <TopListsSection data={data} setData={setData} />}
