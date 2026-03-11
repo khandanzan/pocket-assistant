@@ -6,21 +6,26 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 const COLORS = {
-  bg: "#0f0f13",
-  surface: "#17171f",
-  card: "#1e1e28",
-  border: "#2a2a38",
-  accent: "#7c6af7",
-  accentGlow: "#7c6af740",
-  green: "#4ade80",
-  red: "#f87171",
-  orange: "#fb923c",
-  yellow: "#facc15",
-  blue: "#60a5fa",
-  pink: "#f472b6",
-  text: "#f0f0f8",
-  muted: "#8888aa",
-  dimmed: "#44445a",
+  bg:          "#000000",          // true iOS black
+  surface:     "#1c1c1e",          // iOS grouped bg
+  card:        "#2c2c2e",          // iOS card
+  cardElev:    "#3a3a3c",          // elevated card
+  border:      "#38383a",          // iOS separator
+  accent:      "#0a84ff",          // iOS blue
+  accentGlow:  "#0a84ff30",
+  green:       "#30d158",          // iOS green
+  red:         "#ff453a",          // iOS red
+  orange:      "#ff9f0a",          // iOS orange
+  yellow:      "#ffd60a",          // iOS yellow
+  blue:        "#0a84ff",
+  teal:        "#5ac8f5",          // iOS teal
+  pink:        "#ff375f",          // iOS pink
+  purple:      "#bf5af2",          // iOS purple
+  text:        "#ffffff",
+  textSec:     "#ebebf599",        // iOS secondary label
+  muted:       "#ebebf54d",        // iOS tertiary label
+  dimmed:      "#ffffff1a",
+  fill:        "#787880",          // iOS fill
 };
 
 const STORAGE_KEY = "pocket_assistant_data_v2";
@@ -47,25 +52,32 @@ async function requestNotifPermission() {
   return result;
 }
 
-function sendNotification(title, body) {
+function sendNotification(title, body, tag) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  new Notification(title, { body });
+  try {
+    new Notification(title, {
+      body,
+      tag: tag || title,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+    });
+  } catch {}
 }
 
-function scheduleNotification(triggerDate, title, body) {
+function scheduleNotification(triggerDate, title, body, tag) {
   const ms = triggerDate.getTime() - Date.now();
-  if (ms < 0 || ms > 7 * 24 * 60 * 60 * 1000) return null;
-  return setTimeout(() => sendNotification(title, body), ms);
+  if (ms < 0 || ms > 14 * 24 * 60 * 60 * 1000) return null;
+  return setTimeout(() => sendNotification(title, body, tag), ms);
 }
 
 function scheduleEventNotification(ev) {
   if (!ev.time || ev.reminderOffset == null) return null;
   const eventDate = new Date(ev.date + "T" + ev.time + ":00");
   const triggerDate = new Date(eventDate.getTime() - ev.reminderOffset * 60 * 1000);
-  const label = ev.reminderOffset === 0 ? "началось" :
-    ev.reminderOffset === 30 ? "через 30 мин" :
+  const label = ev.reminderOffset === 0 ? "начинается сейчас" :
+    ev.reminderOffset === 30 ? "через 30 минут" :
     ev.reminderOffset === 60 ? "через 1 час" : "через 2 часа";
-  return scheduleNotification(triggerDate, `🔔 ${ev.title}`, `Событие ${label}`);
+  return scheduleNotification(triggerDate, `📅 ${ev.title}`, label, `event-${ev.id}`);
 }
 
 function scheduleBirthdayNotifications(b) {
@@ -76,17 +88,17 @@ function scheduleBirthdayNotifications(b) {
   const tids = [];
   if (b.notifWeekBefore) {
     const t = new Date(bdayThisYear.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const tid = scheduleNotification(t, `🎂 День рождения через неделю!`, `${b.name}`);
+    const tid = scheduleNotification(t, `🎂 Через неделю день рождения`, b.name, `bday-week-${b.id}`);
     if (tid) tids.push(tid);
   }
   if (b.notifDayBefore) {
     const t = new Date(bdayThisYear.getTime() - 24 * 60 * 60 * 1000);
-    const tid = scheduleNotification(t, `🎂 Завтра день рождения!`, `${b.name}`);
+    const tid = scheduleNotification(t, `🎂 Завтра день рождения!`, b.name, `bday-day-${b.id}`);
     if (tid) tids.push(tid);
   }
   if (b.notifHourBefore) {
     const t = new Date(bdayThisYear.getTime() - 60 * 60 * 1000);
-    const tid = scheduleNotification(t, `🎂 Через час день рождения!`, `${b.name}`);
+    const tid = scheduleNotification(t, `🎂 Через час день рождения!`, b.name, `bday-hour-${b.id}`);
     if (tid) tids.push(tid);
   }
   return tids;
@@ -97,9 +109,28 @@ function checkTodayBirthdays(birthdays) {
   const todayMMDD = String(_now.getMonth() + 1).padStart(2, "0") + "-" + String(_now.getDate()).padStart(2, "0");
   birthdays.forEach(b => {
     if (b.date.slice(5) === todayMMDD) {
-      sendNotification(`🎉 Сегодня день рождения!`, `${b.name}! Не забудь поздравить 🎂`);
+      sendNotification(`🎉 Сегодня день рождения!`, `${b.name} — не забудь поздравить!`, `bday-today-${b.id}`);
     }
   });
+}
+
+// Schedule daily habit reminder at given hour (default 21:00)
+function scheduleHabitReminder(habits, hour = 21) {
+  if (!habits || habits.length === 0) return null;
+  const now = new Date();
+  const trigger = new Date();
+  trigger.setHours(hour, 0, 0, 0);
+  if (trigger <= now) trigger.setDate(trigger.getDate() + 1);
+  const unfinished = habits.filter(h => {
+    const todayKey = today();
+    return !h.checkins?.[todayKey];
+  });
+  if (unfinished.length === 0) return null;
+  const names = unfinished.slice(0, 3).map(h => h.emoji + " " + h.name).join(", ");
+  const body = unfinished.length === 1
+    ? `Не забудь: ${names}`
+    : `${unfinished.length} привычек ждут тебя: ${names}`;
+  return scheduleNotification(trigger, "🔥 Ежедневные привычки", body, "habits-daily");
 }
 
 function loadData() {
@@ -142,20 +173,34 @@ function getFirstDayOfMonth(year, month) {
 function Modal({ title, onClose, children }) {
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "#000000cc",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      zIndex: 1000, padding: "16px"
+      position: "fixed", inset: 0,
+      background: "rgba(0,0,0,0.6)",
+      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      zIndex: 1000,
     }}>
       <div style={{
-        background: COLORS.card, border: `1px solid ${COLORS.border}`,
-        borderRadius: "20px", padding: "24px", width: "100%", maxWidth: "420px",
-        maxHeight: "90vh", overflowY: "auto"
+        background: COLORS.surface,
+        borderRadius: "20px 20px 0 0",
+        width: "100%", maxWidth: "480px",
+        maxHeight: "92vh", overflowY: "auto",
+        paddingBottom: "env(safe-area-inset-bottom)",
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-          <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "18px" }}>{title}</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: COLORS.muted, fontSize: "20px", cursor: "pointer" }}>✕</button>
+        {/* iOS drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
+          <div style={{ width: "36px", height: "4px", background: COLORS.fill, borderRadius: "2px", opacity: 0.5 }} />
         </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 20px 16px" }}>
+          <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "17px", letterSpacing: "-0.3px" }}>{title}</span>
+          <button onClick={onClose} style={{
+            background: COLORS.cardElev, border: "none", color: COLORS.textSec,
+            width: "28px", height: "28px", borderRadius: "50%",
+            fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          }}>✕</button>
+        </div>
+        <div style={{ padding: "0 16px 20px" }}>
         {children}
+        </div>
       </div>
     </div>
   );
@@ -195,23 +240,28 @@ function Textarea({ label, ...props }) {
   );
 }
 
-function Btn({ children, onClick, color = COLORS.accent, variant = "solid", small = false, style = {} }) {
+function Btn({ children, onClick, color = COLORS.accent, variant = "solid", small = false, style = {}, disabled = false }) {
   const base = {
-    border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 600,
-    fontSize: small ? "12px" : "14px", padding: small ? "6px 12px" : "10px 20px",
-    transition: "opacity 0.15s",
+    border: "none", borderRadius: small ? "8px" : "12px", cursor: disabled ? "not-allowed" : "pointer",
+    fontWeight: 600, fontFamily: "inherit",
+    fontSize: small ? "13px" : "15px",
+    padding: small ? "6px 12px" : "12px 20px",
+    opacity: disabled ? 0.5 : 1,
+    letterSpacing: "-0.2px",
     ...style
   };
-  if (variant === "solid") return <button onClick={onClick} style={{ ...base, background: color, color: "#fff" }}>{children}</button>;
-  if (variant === "ghost") return <button onClick={onClick} style={{ ...base, background: "transparent", color: color, border: `1px solid ${color}` }}>{children}</button>;
-  return <button onClick={onClick} style={{ ...base, background: `${color}22`, color: color }}>{children}</button>;
+  if (variant === "solid") return <button onClick={onClick} disabled={disabled} style={{ ...base, background: color, color: "#fff" }}>{children}</button>;
+  if (variant === "ghost") return <button onClick={onClick} disabled={disabled} style={{ ...base, background: "transparent", color: color, border: `1px solid ${color}44` }}>{children}</button>;
+  if (variant === "tint") return <button onClick={onClick} disabled={disabled} style={{ ...base, background: `${color}22`, color: color }}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{ ...base, background: color, color: "#fff" }}>{children}</button>;
 }
+
 
 function ProgressBar({ value, max, color = COLORS.accent }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
     <div style={{ width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
         <span style={{ color: COLORS.muted, fontSize: "11px" }}>{value} / {max}</span>
         <span style={{ color, fontSize: "11px", fontWeight: 700 }}>{pct}%</span>
       </div>
@@ -1748,18 +1798,18 @@ function AuthScreen({ onAuth }) {
 
   const tabStyle = (active) => ({
     flex: 1, background: "none", border: "none",
-    borderBottom: `2px solid ${active ? COLORS.accent : "transparent"}`,
-    color: active ? COLORS.accent : COLORS.muted,
-    padding: "10px 4px", fontSize: "14px", fontWeight: active ? 700 : 400,
-    cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+    borderBottom: `1.5px solid ${active ? COLORS.accent : "transparent"}`,
+    color: active ? COLORS.accent : COLORS.fill,
+    padding: "11px 4px", fontSize: "14px", fontWeight: active ? 600 : 400,
+    cursor: "pointer", fontFamily: "inherit", letterSpacing: "-0.2px",
   });
 
   return (
     <div style={{
       height: "100dvh", background: COLORS.bg, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
-      padding: "calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px)",
-      fontFamily: "system-ui, sans-serif", overflowY: "auto",
+      padding: "calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px)",
+      fontFamily: "-apple-system, 'SF Pro Display', system-ui, sans-serif", overflowY: "auto",
     }}>
       <div style={{ textAlign: "center", marginBottom: "32px" }}>
         <div style={{ fontSize: "56px", marginBottom: "10px" }}>🗂</div>
@@ -1769,7 +1819,7 @@ function AuthScreen({ onAuth }) {
         <div style={{ color: COLORS.muted, fontSize: "13px", marginTop: "6px" }}>Твой личный органайзер</div>
       </div>
 
-      <div style={{ width: "100%", maxWidth: "380px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: "24px", overflow: "hidden" }}>
+      <div style={{ width: "100%", maxWidth: "380px", background: COLORS.surface, border: `0.5px solid ${COLORS.border}`, borderRadius: "20px", overflow: "hidden" }}>
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: `1px solid ${COLORS.border}` }}>
           <button style={tabStyle(tab === "login")} onClick={() => { setTab("login"); setError(""); setResetSent(false); }}>Войти</button>
@@ -1845,7 +1895,7 @@ function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = fals
 
   return (
     <div style={{
-      height: "100dvh", background: COLORS.bg, fontFamily: "'Segoe UI', system-ui, sans-serif",
+      height: "100dvh", background: COLORS.bg, fontFamily: "-apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif",
       display: "flex", flexDirection: "column", maxWidth: "480px", margin: "0 auto",
       overflow: "hidden",
     }}>
@@ -2026,13 +2076,18 @@ export default function App() {
     if (data.birthdays?.length) checkTodayBirthdays(data.birthdays);
     if (data.birthdays?.length) data.birthdays.forEach(b => scheduleBirthdayNotifications(b));
     if (data.events?.length) data.events.forEach(ev => { if (ev.reminderOffset != null) scheduleEventNotification(ev); });
+    if (data.habits?.length) scheduleHabitReminder(data.habits);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Loading splash
   if (screen === "loading") return (
-    <div style={{ height: "100dvh", background: COLORS.bg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
-      <div style={{ fontSize: "56px" }}>🗂</div>
-      <div style={{ color: COLORS.muted, fontSize: "14px" }}>Загрузка...</div>
+    <div style={{
+      height: "100dvh", background: COLORS.bg,
+      display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "20px",
+      fontFamily: "-apple-system, 'SF Pro Display', system-ui, sans-serif",
+    }}>
+      <div style={{ fontSize: "72px", lineHeight: 1 }}>🗂</div>
+      <div style={{ color: COLORS.fill, fontSize: "15px", letterSpacing: "-0.2px" }}>Загрузка...</div>
     </div>
   );
 
@@ -2069,7 +2124,8 @@ export default function App() {
     <div style={{
       background: COLORS.bg,
       color: COLORS.text,
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      fontFamily: "-apple-system, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif",
+      WebkitFontSmoothing: "antialiased",
       display: "flex",
       flexDirection: "column",
       height: "100dvh",
@@ -2079,46 +2135,49 @@ export default function App() {
       overflow: "hidden",
       position: "relative",
     }}>
-      {/* Header — pinned to top, respects status bar */}
+      {/* Header — iOS large title style */}
       <div style={{
         flexShrink: 0,
-        background: COLORS.bg,
-        borderBottom: `1px solid ${COLORS.border}`,
-        paddingTop: `calc(${safeTop} + 12px)`,
-        paddingBottom: "12px",
-        paddingLeft: "20px",
-        paddingRight: "20px",
+        background: "rgba(0,0,0,0.85)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderBottom: `0.5px solid ${COLORS.border}`,
+        paddingTop: `calc(${safeTop} + 10px)`,
+        paddingBottom: "10px",
+        paddingLeft: "16px",
+        paddingRight: "16px",
         zIndex: 100,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ fontSize: "22px" }}>🗂</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: "17px", background: `linear-gradient(90deg, ${COLORS.accent}, ${COLORS.pink})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Карманный ассистент</div>
-            <div style={{ color: COLORS.muted, fontSize: "10px" }}>{new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}</div>
+            <div style={{ fontWeight: 700, fontSize: "17px", color: COLORS.text, letterSpacing: "-0.4px" }}>
+              Карманный ассистент
+            </div>
+            <div style={{ color: COLORS.fill, fontSize: "11px", marginTop: "1px", letterSpacing: "-0.1px" }}>
+              {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+            </div>
           </div>
-          {/* Profile avatar — top right */}
-          <button onClick={() => setScreen("profile")} title={profile?.firstName || authUser?.email} style={{
-            width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
-            background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.pink})`,
+          <button onClick={() => setScreen("profile")} style={{
+            width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0,
+            background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.purple})`,
             border: "none", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "15px", fontWeight: 800, color: "#fff",
-            boxShadow: `0 0 0 2px ${COLORS.accent}44`,
+            fontSize: "14px", fontWeight: 700, color: "#fff",
           }}>{avatarLetter}</button>
         </div>
       </div>
 
-      {/* Scrollable content — fills remaining space */}
+      {/* Scrollable content */}
       <div style={{
         flex: 1,
         overflowY: "auto",
         overflowX: "hidden",
         WebkitOverflowScrolling: "touch",
-        padding: "16px",
+        padding: "12px 16px 16px",
         width: "100%",
         maxWidth: "100%",
         boxSizing: "border-box",
         minWidth: 0,
+        background: COLORS.bg,
       }}>
         {tab === "calendar" && <CalendarSection data={data} setData={setData} />}
         {tab === "diary" && <DiarySection data={data} setData={setData} />}
@@ -2127,11 +2186,12 @@ export default function App() {
         {tab === "birthdays" && <BirthdaysSection data={data} setData={setData} />}
       </div>
 
-      {/* Bottom Nav — pinned, respects home indicator */}
+      {/* Bottom Nav — iOS tab bar */}
       <div style={{
         flexShrink: 0,
-        background: COLORS.surface,
-        borderTop: `1px solid ${COLORS.border}`,
+        background: "rgba(28,28,30,0.92)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderTop: `0.5px solid ${COLORS.border}`,
         display: "flex",
         paddingBottom: "env(safe-area-inset-bottom)",
         zIndex: 100,
@@ -2139,14 +2199,23 @@ export default function App() {
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             flex: 1, background: "none", border: "none",
-            padding: "8px 4px 8px", cursor: "pointer",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: "2px",
-            fontFamily: "inherit",
-            minWidth: 0,
+            padding: "8px 4px 4px", cursor: "pointer",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
+            fontFamily: "inherit", minWidth: 0,
+            transition: "opacity 0.1s",
           }}>
-            <span style={{ fontSize: "18px" }}>{t.icon}</span>
-            <span style={{ fontSize: "9px", fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? COLORS.accent : COLORS.dimmed }}>{t.label}</span>
-            {tab === t.id && <div style={{ width: "4px", height: "4px", background: COLORS.accent, borderRadius: "50%" }} />}
+            <div style={{
+              fontSize: "22px", lineHeight: 1,
+              filter: tab === t.id ? "none" : "grayscale(0.3)",
+              opacity: tab === t.id ? 1 : 0.45,
+              transition: "all 0.15s",
+            }}>{t.icon}</div>
+            <span style={{
+              fontSize: "10px", fontWeight: tab === t.id ? 600 : 400,
+              color: tab === t.id ? COLORS.accent : COLORS.fill,
+              letterSpacing: "-0.1px",
+              transition: "color 0.15s",
+            }}>{t.label}</span>
           </button>
         ))}
       </div>
