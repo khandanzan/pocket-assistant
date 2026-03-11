@@ -1,4 +1,8 @@
 import { useState, useEffect } from "react";
+import { auth as fbAuth } from "./firebase";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
 const COLORS = {
   bg: "#0f0f13",
@@ -1670,7 +1674,7 @@ function NotifSettingsModal({ birthday, onSave, onClose }) {
 const AUTH_KEY = "pocket_auth_v1";
 const PROFILE_KEY = "pocket_profile_v1";
 
-function loadAuth() {
+function loadAuth() { // eslint-disable-line no-unused-vars
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
 }
 function saveAuth(auth) { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
@@ -1680,132 +1684,139 @@ function loadProfile() {
 }
 function saveProfile(p) { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }
 
-// Simulated OTP store (in production replace with Firebase / Supabase)
-const _otpStore = {};
-function generateOTP() { return String(Math.floor(100000 + Math.random() * 900000)); }
-async function sendOTP(email) {
-  const code = generateOTP();
-  _otpStore[email.toLowerCase()] = { code, ts: Date.now() };
-  // In demo mode we log to console — replace with real email service
-  console.log(`[OTP для ${email}]: ${code}`);
-  return code; // returned so demo can show it
-}
-function verifyOTP(email, code) {
-  const entry = _otpStore[email.toLowerCase()];
-  if (!entry) return false;
-  if (Date.now() - entry.ts > 10 * 60 * 1000) return false; // 10 min
-  return entry.code === code.trim();
-}
+// ─── FIREBASE AUTH SCREEN ────────────────────────────────────────────────────
 
-// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
+async function fbRegister(email, password) {
+  return createUserWithEmailAndPassword(fbAuth, email, password);
+}
+async function fbLogin(email, password) {
+  return signInWithEmailAndPassword(fbAuth, email, password);
+}
+async function fbReset(email) {
+  return sendPasswordResetEmail(fbAuth, email);
+}
 
 function AuthScreen({ onAuth }) {
-  const [step, setStep] = useState("email"); // "email" | "code"
+  const [tab, setTab] = useState("login"); // "login" | "register" | "reset"
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [demoCode, setDemoCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resetSent, setResetSent] = useState(false);
 
-  async function handleSendCode() {
-    if (!email.trim() || !email.includes("@")) { setError("Введи корректный email"); return; }
-    setLoading(true); setError("");
+  const iBase = {
+    width: "100%", background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+    borderRadius: "12px", padding: "12px 14px", color: COLORS.text, fontSize: "16px",
+    outline: "none", boxSizing: "border-box", fontFamily: "inherit", marginBottom: "12px",
+  };
+
+  function getErrorText(code) {
+    const map = {
+      "auth/user-not-found": "Пользователь не найден",
+      "auth/wrong-password": "Неверный пароль",
+      "auth/email-already-in-use": "Email уже используется",
+      "auth/weak-password": "Пароль слишком короткий (минимум 6 символов)",
+      "auth/invalid-email": "Некорректный email",
+      "auth/invalid-credential": "Неверный email или пароль",
+      "auth/too-many-requests": "Слишком много попыток. Попробуй позже",
+      "auth/network-request-failed": "Нет соединения с интернетом",
+    };
+    return map[code] || "Ошибка. Попробуй ещё раз.";
+  }
+
+  async function handleSubmit() {
+    setError(""); setLoading(true);
     try {
-      const otp = await sendOTP(email.trim());
-      setDemoCode(otp);
-      setStep("code");
-    } catch { setError("Ошибка отправки. Попробуй ещё раз."); }
+      if (tab === "login") {
+        await fbLogin(email.trim(), password);
+        onAuth({ email: email.trim() });
+      } else if (tab === "register") {
+        if (password !== confirm) { setError("Пароли не совпадают"); setLoading(false); return; }
+        if (password.length < 6) { setError("Пароль минимум 6 символов"); setLoading(false); return; }
+        await fbRegister(email.trim(), password);
+        onAuth({ email: email.trim() });
+      } else {
+        await fbReset(email.trim());
+        setResetSent(true);
+      }
+    } catch (e) {
+      setError(getErrorText(e.code));
+    }
     setLoading(false);
   }
 
-  function handleVerify() {
-    if (!code.trim()) { setError("Введи код"); return; }
-    if (verifyOTP(email.trim(), code)) {
-      const auth = { email: email.trim(), ts: Date.now() };
-      saveAuth(auth);
-      onAuth(auth);
-    } else {
-      setError("Неверный код. Попробуй ещё раз.");
-    }
-  }
+  const tabStyle = (active) => ({
+    flex: 1, background: "none", border: "none",
+    borderBottom: `2px solid ${active ? COLORS.accent : "transparent"}`,
+    color: active ? COLORS.accent : COLORS.muted,
+    padding: "10px 4px", fontSize: "14px", fontWeight: active ? 700 : 400,
+    cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+  });
 
   return (
     <div style={{
       height: "100dvh", background: COLORS.bg, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
-      padding: `calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px)`,
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
-      overflowY: "auto", WebkitOverflowScrolling: "touch",
+      padding: "calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px)",
+      fontFamily: "system-ui, sans-serif", overflowY: "auto",
     }}>
-      {/* Logo */}
-      <div style={{ textAlign: "center", marginBottom: "40px" }}>
-        <div style={{ fontSize: "56px", marginBottom: "12px" }}>🗂</div>
-        <div style={{ fontWeight: 800, fontSize: "26px", background: `linear-gradient(90deg, ${COLORS.accent}, ${COLORS.pink})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+      <div style={{ textAlign: "center", marginBottom: "32px" }}>
+        <div style={{ fontSize: "56px", marginBottom: "10px" }}>🗂</div>
+        <div style={{ fontWeight: 800, fontSize: "24px", background: `linear-gradient(90deg, ${COLORS.accent}, ${COLORS.pink})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
           Карманный ассистент
         </div>
         <div style={{ color: COLORS.muted, fontSize: "13px", marginTop: "6px" }}>Твой личный органайзер</div>
       </div>
 
-      <div style={{ width: "100%", maxWidth: "380px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: "24px", padding: "28px" }}>
-        {step === "email" ? (
-          <>
-            <div style={{ color: COLORS.text, fontWeight: 700, fontSize: "18px", marginBottom: "6px" }}>Добро пожаловать 👋</div>
-            <div style={{ color: COLORS.muted, fontSize: "13px", marginBottom: "24px", lineHeight: "1.5" }}>
-              Введи email — мы отправим код для входа. Если аккаунта нет, он создастся автоматически.
+      <div style={{ width: "100%", maxWidth: "380px", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: "24px", overflow: "hidden" }}>
+        {/* Tabs */}
+        <div style={{ display: "flex", borderBottom: `1px solid ${COLORS.border}` }}>
+          <button style={tabStyle(tab === "login")} onClick={() => { setTab("login"); setError(""); setResetSent(false); }}>Войти</button>
+          <button style={tabStyle(tab === "register")} onClick={() => { setTab("register"); setError(""); }}>Регистрация</button>
+          <button style={tabStyle(tab === "reset")} onClick={() => { setTab("reset"); setError(""); setResetSent(false); }}>Забыл пароль</button>
+        </div>
+
+        <div style={{ padding: "24px" }}>
+          {tab === "reset" && resetSent ? (
+            <div style={{ textAlign: "center", padding: "12px 0" }}>
+              <div style={{ fontSize: "40px", marginBottom: "12px" }}>📬</div>
+              <div style={{ color: COLORS.green, fontWeight: 700, fontSize: "15px", marginBottom: "8px" }}>Письмо отправлено!</div>
+              <div style={{ color: COLORS.muted, fontSize: "13px", lineHeight: "1.6" }}>Проверь почту <span style={{ color: COLORS.accent }}>{email}</span> и перейди по ссылке для сброса пароля.</div>
+              <button onClick={() => { setTab("login"); setResetSent(false); }} style={{ marginTop: "20px", background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontFamily: "inherit" }}>← Вернуться к входу</button>
             </div>
-            <div style={{ marginBottom: "14px" }}>
+          ) : (
+            <>
               <label style={{ color: COLORS.muted, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Email</label>
-              <input
-                type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && handleSendCode()}
-                placeholder="your@email.com"
-                style={{ width: "100%", background: COLORS.surface, border: `1px solid ${error ? COLORS.red : COLORS.border}`, borderRadius: "12px", padding: "12px 14px", color: COLORS.text, fontSize: "15px", outline: "none", boxSizing: "border-box" }}
-              />
-            </div>
-            {error && <div style={{ color: COLORS.red, fontSize: "12px", marginBottom: "12px" }}>{error}</div>}
-            <button onClick={handleSendCode} disabled={loading} style={{
-              width: "100%", background: loading ? COLORS.dimmed : COLORS.accent, border: "none", color: "#fff",
-              borderRadius: "12px", padding: "13px", fontWeight: 700, fontSize: "15px", cursor: loading ? "not-allowed" : "pointer"
-            }}>{loading ? "Отправляем..." : "Получить код →"}</button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => { setStep("email"); setCode(""); setError(""); setDemoCode(""); }} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", fontSize: "13px", marginBottom: "16px", padding: 0 }}>← Назад</button>
-            <div style={{ color: COLORS.text, fontWeight: 700, fontSize: "18px", marginBottom: "6px" }}>Введи код 🔐</div>
-            <div style={{ color: COLORS.muted, fontSize: "13px", marginBottom: "8px", lineHeight: "1.5" }}>
-              Код отправлен на <span style={{ color: COLORS.accent, fontWeight: 600 }}>{email}</span>. Действителен 10 минут.
-            </div>
+              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} placeholder="your@email.com" style={iBase} autoComplete="email" />
 
-            {/* Demo mode notice */}
-            {demoCode && (
-              <div style={{ background: `${COLORS.yellow}18`, border: `1px solid ${COLORS.yellow}44`, borderRadius: "10px", padding: "10px 14px", marginBottom: "16px" }}>
-                <div style={{ color: COLORS.yellow, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>Демо-режим</div>
-                <div style={{ color: COLORS.text, fontSize: "20px", fontWeight: 800, letterSpacing: "4px", marginTop: "4px" }}>{demoCode}</div>
-                <div style={{ color: COLORS.muted, fontSize: "11px", marginTop: "2px" }}>В реальном проекте приходит на email</div>
-              </div>
-            )}
+              {tab !== "reset" && (
+                <>
+                  <label style={{ color: COLORS.muted, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Пароль</label>
+                  <input type="password" value={password} onChange={e => { setPassword(e.target.value); setError(""); }} placeholder="Минимум 6 символов" style={iBase} autoComplete={tab === "register" ? "new-password" : "current-password"} onKeyDown={e => e.key === "Enter" && !confirm && handleSubmit()} />
+                </>
+              )}
 
-            <div style={{ marginBottom: "14px" }}>
-              <label style={{ color: COLORS.muted, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Код из письма</label>
-              <input
-                type="text" inputMode="numeric" maxLength={6} value={code}
-                onChange={e => { setCode(e.target.value.replace(/\D/g, "")); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && handleVerify()}
-                placeholder="000000"
-                style={{ width: "100%", background: COLORS.surface, border: `1px solid ${error ? COLORS.red : COLORS.border}`, borderRadius: "12px", padding: "12px 14px", color: COLORS.text, fontSize: "22px", fontWeight: 800, letterSpacing: "6px", outline: "none", boxSizing: "border-box", textAlign: "center" }}
-              />
-            </div>
-            {error && <div style={{ color: COLORS.red, fontSize: "12px", marginBottom: "12px" }}>{error}</div>}
-            <button onClick={handleVerify} style={{
-              width: "100%", background: COLORS.accent, border: "none", color: "#fff",
-              borderRadius: "12px", padding: "13px", fontWeight: 700, fontSize: "15px", cursor: "pointer"
-            }}>Войти ✓</button>
-            <button onClick={() => { setDemoCode(""); sendOTP(email).then(c => setDemoCode(c)); }} style={{
-              width: "100%", background: "transparent", border: `1px solid ${COLORS.border}`, color: COLORS.muted,
-              borderRadius: "12px", padding: "10px", fontWeight: 600, fontSize: "13px", cursor: "pointer", marginTop: "10px"
-            }}>Отправить код повторно</button>
-          </>
-        )}
+              {tab === "register" && (
+                <>
+                  <label style={{ color: COLORS.muted, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Повтори пароль</label>
+                  <input type="password" value={confirm} onChange={e => { setConfirm(e.target.value); setError(""); }} placeholder="Ещё раз пароль" style={iBase} onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+                </>
+              )}
+
+              {error && <div style={{ color: COLORS.red, fontSize: "13px", marginBottom: "12px", lineHeight: "1.4" }}>⚠️ {error}</div>}
+
+              <button onClick={handleSubmit} disabled={loading} style={{
+                width: "100%", background: loading ? COLORS.dimmed : COLORS.accent,
+                border: "none", color: "#fff", borderRadius: "12px", padding: "14px",
+                fontWeight: 700, fontSize: "15px", cursor: loading ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+              }}>
+                {loading ? "Подождите..." : tab === "login" ? "Войти →" : tab === "register" ? "Создать аккаунт →" : "Отправить письмо →"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1942,17 +1953,41 @@ const TABS = [
 ];
 
 export default function App() {
-  const [auth, setAuth] = useState(loadAuth);
+  const [authUser, setAuthUser] = useState(null);
   const [profile, setProfile] = useState(loadProfile);
-  const [screen, setScreen] = useState(() => {
-    const a = loadAuth();
-    if (!a) return "auth";
-    const p = loadProfile();
-    if (!p) return "profile-setup";
-    return "app";
-  });
+  const [screen, setScreen] = useState("loading");
   const [tab, setTab] = useState("calendar");
   const [data, setDataRaw] = useState(loadData);
+
+  // Listen to Firebase auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(fbAuth, async (fbUser) => {
+      if (fbUser) {
+        setAuthUser(fbUser);
+        // Load profile from Firestore
+        try {
+          const snap = await getDoc(doc(db, "users", fbUser.uid));
+          if (snap.exists()) {
+            const p = snap.data();
+            setProfile(p);
+            saveProfileLS(p);
+            setScreen("app");
+          } else {
+            setScreen("profile-setup");
+          }
+        } catch {
+          // Firestore offline — use localStorage profile
+          const p = loadProfile();
+          setProfile(p);
+          setScreen(p ? "app" : "profile-setup");
+        }
+      } else {
+        setAuthUser(null);
+        setScreen("auth");
+      }
+    });
+    return unsub;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setData(updater) {
     setDataRaw(prev => {
@@ -1962,21 +1997,28 @@ export default function App() {
     });
   }
 
-  function handleAuth(authData) {
-    setAuth(authData);
-    const p = loadProfile();
-    setProfile(p);
-    setScreen(p ? "app" : "profile-setup");
+  function handleAuth() {
+    // onAuthStateChanged will handle screen transition
   }
 
-  function handleProfileSave(profileData) {
+  async function handleProfileSave(profileData) {
     setProfile(profileData);
+    saveProfileLS(profileData);
+    if (authUser) {
+      try {
+        await setDoc(doc(db, "users", authUser.uid), {
+          ...profileData, uid: authUser.uid, email: authUser.email, updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch { /* offline, saved locally */ }
+    }
     setScreen("app");
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    try { await signOut(fbAuth); } catch {}
     clearAuth();
-    setAuth(null);
+    setAuthUser(null);
+    setProfile(null);
     setScreen("auth");
   }
 
@@ -1986,11 +2028,19 @@ export default function App() {
     if (data.events?.length) data.events.forEach(ev => { if (ev.reminderOffset != null) scheduleEventNotification(ev); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Loading splash
+  if (screen === "loading") return (
+    <div style={{ height: "100dvh", background: COLORS.bg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
+      <div style={{ fontSize: "56px" }}>🗂</div>
+      <div style={{ color: COLORS.muted, fontSize: "14px" }}>Загрузка...</div>
+    </div>
+  );
+
   if (screen === "auth") return <AuthScreen onAuth={handleAuth} />;
 
   if (screen === "profile-setup") return (
     <ProfileScreen
-      auth={auth}
+      auth={authUser}
       profile={profile}
       onSave={handleProfileSave}
       onSkip={() => setScreen("app")}
@@ -2010,7 +2060,7 @@ export default function App() {
     />
   );
 
-  const avatarLetter = (profile?.firstName || auth?.email || "?")[0].toUpperCase();
+  const avatarLetter = (profile?.firstName || authUser?.email || "?")[0].toUpperCase();
 
   // Safe area values for iPhone notch / Dynamic Island / home indicator
   const safeTop = "env(safe-area-inset-top)";
