@@ -2,8 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1,
-          user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0f0f13" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -12,13 +11,49 @@
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/icon-192.png" />
     <title>Карманный ассистент</title>
     <style>
+      /* Reset */
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body { height: 100%; background: #0f0f13; overflow: hidden; }
-      body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
-      #root { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
-      * { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+      /* Lock viewport — no horizontal overflow ever */
+      html {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        background: #0f0f13;
+      }
+      body {
+        height: 100%;
+        width: 100%;
+        max-width: 100vw;
+        overflow: hidden;
+        background: #0f0f13;
+        font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        overscroll-behavior: none;
+        /* No safe-area padding here — handled in React */
+      }
+      #root {
+        height: 100%;
+        width: 100%;
+        max-width: 100vw;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* CRITICAL: every element is constrained to viewport width */
+      * {
+        max-width: 100%;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* Inputs don't zoom on iOS */
       input, textarea, select { font-size: 16px !important; }
-      ::-webkit-scrollbar { width: 0; height: 0; }
+
+      /* Hide scrollbars */
+      ::-webkit-scrollbar { display: none; }
+      * { scrollbar-width: none; }
     </style>
   </head>
   <body>
