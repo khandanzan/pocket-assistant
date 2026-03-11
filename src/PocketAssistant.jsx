@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { auth as fbAuth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 
 const COLORS = {
@@ -2008,6 +2008,38 @@ export default function App() {
   const [screen, setScreen] = useState("loading");
   const [tab, setTab] = useState("calendar");
   const [data, setDataRaw] = useState(loadData);
+  const [syncing, setSyncing] = useState(false);
+
+  // ── Firestore data sync ───────────────────────────────────────────────────
+  // Write data to both localStorage and Firestore
+  async function syncToFirestore(uid, newData) {
+    try {
+      await setDoc(doc(db, "data", uid), {
+        ...newData,
+        updatedAt: serverTimestamp(),
+      }, { merge: false });
+    } catch { /* offline — data safely in localStorage */ }
+  }
+
+  // Load data from Firestore (once on login)
+  async function loadFromFirestore(uid) {
+    try {
+      setSyncing(true);
+      const snap = await getDoc(doc(db, "data", uid));
+      if (snap.exists()) {
+        const remote = snap.data();
+        // Use remote data if it's newer or local is empty
+        const local = loadData();
+        const remoteTime = remote.updatedAt?.toMillis?.() || 0;
+        const localTime = local._savedAt || 0;
+        const merged = remoteTime >= localTime ? remote : local;
+        delete merged.updatedAt;
+        setDataRaw(merged);
+        saveData({ ...merged, _savedAt: Date.now() });
+      }
+    } catch { /* use localStorage data */ }
+    finally { setSyncing(false); }
+  }
 
   // Listen to Firebase auth state
   useEffect(() => {
@@ -2022,11 +2054,12 @@ export default function App() {
             setProfile(p);
             saveProfileLS(p);
             setScreen("app");
+            // Load app data from Firestore in background
+            loadFromFirestore(fbUser.uid);
           } else {
             setScreen("profile-setup");
           }
         } catch {
-          // Firestore offline — use localStorage profile
           const p = loadProfile();
           setProfile(p);
           setScreen(p ? "app" : "profile-setup");
@@ -2042,7 +2075,10 @@ export default function App() {
   function setData(updater) {
     setDataRaw(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      saveData(next);
+      const withTs = { ...next, _savedAt: Date.now() };
+      saveData(withTs);
+      // Sync to Firestore if logged in
+      if (authUser?.uid) syncToFirestore(authUser.uid, next);
       return next;
     });
   }
@@ -2059,7 +2095,7 @@ export default function App() {
         await setDoc(doc(db, "users", authUser.uid), {
           ...profileData, uid: authUser.uid, email: authUser.email, updatedAt: new Date().toISOString()
         }, { merge: true });
-      } catch { /* offline, saved locally */ }
+      } catch { /* offline */ }
     }
     setScreen("app");
   }
@@ -2149,8 +2185,9 @@ export default function App() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: "17px", color: COLORS.text, letterSpacing: "-0.4px" }}>
+            <div style={{ fontWeight: 700, fontSize: "17px", color: COLORS.text, letterSpacing: "-0.4px", display: "flex", alignItems: "center", gap: "6px" }}>
               Карманный ассистент
+              {syncing && <span style={{ fontSize: "10px", color: COLORS.fill, fontWeight: 400 }}>↑ синхронизация...</span>}
             </div>
             <div style={{ color: COLORS.fill, fontSize: "11px", marginTop: "1px", letterSpacing: "-0.1px" }}>
               {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
