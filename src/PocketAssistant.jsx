@@ -205,7 +205,7 @@ function Btn({ children, onClick, color = COLORS.accent, variant = "solid", smal
 function ProgressBar({ value, max, color = COLORS.accent }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div>
+    <div style={{ width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
         <span style={{ color: COLORS.muted, fontSize: "11px" }}>{value} / {max}</span>
         <span style={{ color, fontSize: "11px", fontWeight: 700 }}>{pct}%</span>
@@ -363,7 +363,7 @@ function DayView({ date, events, birthdays, onAdd, onEdit, onDelete, onBack }) {
   const allEventsMap = Object.fromEntries(events.map(e => [e.id, e]));
 
   return (
-    <div>
+      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
         <button onClick={onBack} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px" }}>← Назад</button>
         <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "16px", flex: 1 }}>
@@ -483,7 +483,7 @@ function WeekView({ weekStart, events, onDayClick, onBack }) {
   });
 
   return (
-    <div>
+      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
         <button onClick={onBack} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px" }}>← Назад</button>
         <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "14px", flex: 1 }}>
@@ -1163,7 +1163,7 @@ function HabitDetail({ habit, onBack, onToggle, onDelete }) {
   const todayFmt = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 
   return (
-    <div>
+      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
         <button onClick={onBack} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px" }}>← Назад</button>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
@@ -2014,7 +2014,6 @@ export default function App() {
 
   // Safe area values for iPhone notch / Dynamic Island / home indicator
   const safeTop = "env(safe-area-inset-top)";
-  const safeBottom = "env(safe-area-inset-bottom)";
 
   return (
     <div style={{
@@ -2070,7 +2069,6 @@ export default function App() {
         maxWidth: "100%",
         boxSizing: "border-box",
         minWidth: 0,
-        contain: "layout style",
       }}>
         {tab === "calendar" && <CalendarSection data={data} setData={setData} />}
         {tab === "diary" && <DiarySection data={data} setData={setData} />}
