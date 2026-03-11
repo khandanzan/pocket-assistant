@@ -1682,7 +1682,7 @@ function clearAuth() { localStorage.removeItem(AUTH_KEY); }
 function loadProfile() {
   try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
 }
-function saveProfile(p) { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }
+function saveProfileLS(p) { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }
 
 // ─── FIREBASE AUTH SCREEN ────────────────────────────────────────────────────
 
@@ -2051,7 +2051,7 @@ export default function App() {
 
   if (screen === "profile") return (
     <ProfileScreen
-      auth={auth}
+      auth={authUser || { email: "" }}
       profile={profile}
       onSave={d => { handleProfileSave(d); setScreen("app"); }}
       onSkip={() => setScreen("app")}
@@ -2097,7 +2097,7 @@ export default function App() {
             <div style={{ color: COLORS.muted, fontSize: "10px" }}>{new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}</div>
           </div>
           {/* Profile avatar — top right */}
-          <button onClick={() => setScreen("profile")} title={profile?.firstName || auth?.email} style={{
+          <button onClick={() => setScreen("profile")} title={profile?.firstName || authUser?.email} style={{
             width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
             background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.pink})`,
             border: "none", cursor: "pointer",
