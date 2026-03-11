@@ -88,7 +88,8 @@ function scheduleBirthdayNotifications(b) {
 }
 
 function checkTodayBirthdays(birthdays) {
-  const todayMMDD = new Date().toISOString().slice(5, 10);
+  const _now = new Date();
+  const todayMMDD = String(_now.getMonth() + 1).padStart(2, "0") + "-" + String(_now.getDate()).padStart(2, "0");
   birthdays.forEach(b => {
     if (b.date.slice(5) === todayMMDD) {
       sendNotification(`🎉 Сегодня день рождения!`, `${b.name}! Не забудь поздравить 🎂`);
@@ -116,7 +117,11 @@ function formatDate(d) {
 }
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getDaysInMonth(year, month) {
@@ -968,9 +973,9 @@ function TopListsSection({ data, setData }) {
   ];
 
   return (
-    <div>
+    <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }}>
       {/* List tabs */}
-      <div style={{ display: "flex", gap: "8px", overflowX: "auto", marginBottom: "20px", paddingBottom: "4px" }}>
+      <div style={{ display: "flex", gap: "8px", overflowX: "auto", marginBottom: "16px", paddingBottom: "4px", WebkitOverflowScrolling: "touch" }}>
         {data.topLists.map(l => (
           <button key={l.id} onClick={() => setActiveList(l.id)} style={{
             whiteSpace: "nowrap", background: activeList === l.id ? COLORS.accent : COLORS.surface,
@@ -1507,7 +1512,8 @@ function BirthdaysSection({ data, setData }) {
   }
 
   const sorted = [...(data.birthdays || [])].sort((a, b) => getDaysUntilBirthday(a.date) - getDaysUntilBirthday(b.date));
-  const todayMMDD = new Date().toISOString().slice(5, 10);
+  const _now = new Date();
+  const todayMMDD = String(_now.getMonth() + 1).padStart(2, "0") + "-" + String(_now.getDate()).padStart(2, "0");
 
   return (
     <div>
@@ -1524,7 +1530,12 @@ function BirthdaysSection({ data, setData }) {
       )}
       {notifPerm === "granted" && (
         <div style={{ background: `${COLORS.green}18`, border: `1px solid ${COLORS.green}44`, borderRadius: "12px", padding: "10px 16px", marginBottom: "16px" }}>
-          <span style={{ color: COLORS.green, fontSize: "12px" }}>✓ Уведомления включены</span>
+          <span style={{ color: COLORS.green, fontSize: "12px" }}>✓ Уведомления включены · работают пока приложение открыто</span>
+        </div>
+      )}
+      {notifPerm === "unsupported" && (
+        <div style={{ background: `${COLORS.yellow}18`, border: `1px solid ${COLORS.yellow}44`, borderRadius: "12px", padding: "10px 16px", marginBottom: "16px" }}>
+          <span style={{ color: COLORS.yellow, fontSize: "12px" }}>⚠️ На iPhone уведомления работают только пока приложение открыто. Для фоновых уведомлений нужен iOS 16.4+ и разрешение в настройках Safari.</span>
         </div>
       )}
 
@@ -2052,15 +2063,16 @@ export default function App() {
         overflowY: "auto",
         overflowX: "hidden",
         WebkitOverflowScrolling: "touch",
-        padding: "20px 20px 20px 20px",
+        padding: "16px 16px 16px 16px",
+        width: "100%",
+        boxSizing: "border-box",
+        minWidth: 0,
       }}>
         {tab === "calendar" && <CalendarSection data={data} setData={setData} />}
         {tab === "diary" && <DiarySection data={data} setData={setData} />}
         {tab === "top" && <TopListsSection data={data} setData={setData} />}
         {tab === "habits" && <HabitsSection data={data} setData={setData} />}
         {tab === "birthdays" && <BirthdaysSection data={data} setData={setData} />}
-        {/* Bottom padding so content doesn't hide behind nav bar */}
-        <div style={{ height: `calc(70px + ${safeBottom})` }} />
       </div>
 
       {/* Bottom Nav — pinned, respects home indicator */}
@@ -2069,15 +2081,16 @@ export default function App() {
         background: COLORS.surface,
         borderTop: `1px solid ${COLORS.border}`,
         display: "flex",
-        paddingBottom: safeBottom,
+        paddingBottom: "env(safe-area-inset-bottom)",
         zIndex: 100,
       }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             flex: 1, background: "none", border: "none",
-            padding: "10px 4px 10px", cursor: "pointer",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
+            padding: "8px 4px 8px", cursor: "pointer",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "2px",
             fontFamily: "inherit",
+            minWidth: 0,
           }}>
             <span style={{ fontSize: "18px" }}>{t.icon}</span>
             <span style={{ fontSize: "9px", fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? COLORS.accent : COLORS.dimmed }}>{t.label}</span>
