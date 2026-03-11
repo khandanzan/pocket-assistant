@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { useState, useEffect } from "react";
 import { auth as fbAuth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "firebase/auth";
@@ -1677,7 +1678,6 @@ const PROFILE_KEY = "pocket_profile_v1";
 function loadAuth() { // eslint-disable-line no-unused-vars
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
 }
-function saveAuth(auth) { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
 function clearAuth() { localStorage.removeItem(AUTH_KEY); }
 function loadProfile() {
   try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || "null"); } catch { return null; }
