@@ -1837,11 +1837,11 @@ function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = fals
   });
 
   function handleSave() {
-    saveProfile({ ...form, email: auth.email, updatedAt: Date.now() });
-    onSave({ ...form, email: auth.email });
+    saveProfileLS({ ...form, email: auth?.email || "", updatedAt: Date.now() });
+    onSave({ ...form, email: auth?.email || "" });
   }
 
-  const avatarLetter = (form.firstName || auth.email || "?")[0].toUpperCase();
+  const avatarLetter = (form.firstName || auth?.email || "?")[0].toUpperCase();
 
   return (
     <div style={{
@@ -1876,7 +1876,7 @@ function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = fals
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: "28px", fontWeight: 800, color: "#fff", marginBottom: "8px"
           }}>{avatarLetter}</div>
-          <div style={{ color: COLORS.muted, fontSize: "13px" }}>{auth.email}</div>
+          <div style={{ color: COLORS.muted, fontSize: "13px" }}>{auth?.email}</div>
           {isSetup && <div style={{ color: COLORS.muted, fontSize: "12px", marginTop: "6px", textAlign: "center", maxWidth: "260px", lineHeight: "1.5" }}>Заполни профиль или пропусти — можно сделать это позже</div>}
         </div>
 
@@ -2040,7 +2040,7 @@ export default function App() {
 
   if (screen === "profile-setup") return (
     <ProfileScreen
-      auth={authUser}
+      auth={authUser || { email: "" }}
       profile={profile}
       onSave={handleProfileSave}
       onSkip={() => setScreen("app")}
