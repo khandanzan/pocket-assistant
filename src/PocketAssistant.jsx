@@ -1720,9 +1720,11 @@ function AuthScreen({ onAuth }) {
 
   return (
     <div style={{
-      minHeight: "100vh", background: COLORS.bg, display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", padding: "24px",
-      fontFamily: "'Segoe UI', system-ui, sans-serif"
+      height: "100dvh", background: COLORS.bg, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: `calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px)`,
+      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      overflowY: "auto", WebkitOverflowScrolling: "touch",
     }}>
       {/* Logo */}
       <div style={{ textAlign: "center", marginBottom: "40px" }}>
@@ -1821,11 +1823,17 @@ function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = fals
 
   return (
     <div style={{
-      minHeight: "100vh", background: COLORS.bg, fontFamily: "'Segoe UI', system-ui, sans-serif",
-      display: "flex", flexDirection: "column", maxWidth: "480px", margin: "0 auto"
+      height: "100dvh", background: COLORS.bg, fontFamily: "'Segoe UI', system-ui, sans-serif",
+      display: "flex", flexDirection: "column", maxWidth: "480px", margin: "0 auto",
+      overflow: "hidden",
     }}>
       {/* Header */}
-      <div style={{ padding: "20px 20px 16px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", gap: "12px" }}>
+      <div style={{
+        flexShrink: 0,
+        paddingTop: `calc(env(safe-area-inset-top) + 16px)`,
+        paddingBottom: "16px", paddingLeft: "20px", paddingRight: "20px",
+        borderBottom: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", gap: "12px"
+      }}>
         {!isSetup && (
           <button onClick={onSkip} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px" }}>← Назад</button>
         )}
@@ -1837,7 +1845,7 @@ function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = fals
         )}
       </div>
 
-      <div style={{ flex: 1, padding: "24px 20px", overflowY: "auto" }}>
+      <div style={{ flex: 1, padding: "24px 20px", overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: `calc(env(safe-area-inset-bottom) + 24px)` }}>
         {/* Avatar */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "28px" }}>
           <div style={{
@@ -1993,10 +2001,33 @@ export default function App() {
 
   const avatarLetter = (profile?.firstName || auth?.email || "?")[0].toUpperCase();
 
+  // Safe area values for iPhone notch / Dynamic Island / home indicator
+  const safeTop = "env(safe-area-inset-top)";
+  const safeBottom = "env(safe-area-inset-bottom)";
+
   return (
-    <div style={{ background: COLORS.bg, minHeight: "100vh", color: COLORS.text, fontFamily: "'Segoe UI', system-ui, sans-serif", display: "flex", flexDirection: "column", maxWidth: "480px", margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ padding: "16px 20px 12px", background: COLORS.bg, position: "sticky", top: 0, zIndex: 100, borderBottom: `1px solid ${COLORS.border}` }}>
+    <div style={{
+      background: COLORS.bg,
+      color: COLORS.text,
+      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      display: "flex",
+      flexDirection: "column",
+      height: "100dvh",          // exact screen height, no overflow
+      maxWidth: "480px",
+      margin: "0 auto",
+      overflow: "hidden",        // prevent any outer scroll
+    }}>
+      {/* Header — pinned to top, respects status bar */}
+      <div style={{
+        flexShrink: 0,
+        background: COLORS.bg,
+        borderBottom: `1px solid ${COLORS.border}`,
+        paddingTop: `calc(${safeTop} + 12px)`,
+        paddingBottom: "12px",
+        paddingLeft: "20px",
+        paddingRight: "20px",
+        zIndex: 100,
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <span style={{ fontSize: "22px" }}>🗂</span>
           <div style={{ flex: 1 }}>
@@ -2007,28 +2038,46 @@ export default function App() {
           <button onClick={() => setScreen("profile")} title={profile?.firstName || auth?.email} style={{
             width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
             background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.pink})`,
-            border: "2px solid transparent", cursor: "pointer",
+            border: "none", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "15px", fontWeight: 800, color: "#fff", boxShadow: `0 0 0 2px ${COLORS.accent}44`
+            fontSize: "15px", fontWeight: 800, color: "#fff",
+            boxShadow: `0 0 0 2px ${COLORS.accent}44`,
           }}>{avatarLetter}</button>
         </div>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, padding: "20px", overflowY: "auto", paddingBottom: "90px" }}>
+      {/* Scrollable content — fills remaining space */}
+      <div style={{
+        flex: 1,
+        overflowY: "auto",
+        overflowX: "hidden",
+        WebkitOverflowScrolling: "touch",
+        padding: "20px 20px 20px 20px",
+      }}>
         {tab === "calendar" && <CalendarSection data={data} setData={setData} />}
         {tab === "diary" && <DiarySection data={data} setData={setData} />}
         {tab === "top" && <TopListsSection data={data} setData={setData} />}
         {tab === "habits" && <HabitsSection data={data} setData={setData} />}
         {tab === "birthdays" && <BirthdaysSection data={data} setData={setData} />}
+        {/* Bottom padding so content doesn't hide behind nav bar */}
+        <div style={{ height: `calc(70px + ${safeBottom})` }} />
       </div>
 
-      {/* Bottom Nav */}
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "480px", background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, display: "flex", zIndex: 100 }}>
+      {/* Bottom Nav — pinned, respects home indicator */}
+      <div style={{
+        flexShrink: 0,
+        background: COLORS.surface,
+        borderTop: `1px solid ${COLORS.border}`,
+        display: "flex",
+        paddingBottom: safeBottom,
+        zIndex: 100,
+      }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, background: "none", border: "none", padding: "10px 4px 14px", cursor: "pointer",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: "3px"
+            flex: 1, background: "none", border: "none",
+            padding: "10px 4px 10px", cursor: "pointer",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
+            fontFamily: "inherit",
           }}>
             <span style={{ fontSize: "18px" }}>{t.icon}</span>
             <span style={{ fontSize: "9px", fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? COLORS.accent : COLORS.dimmed }}>{t.label}</span>
