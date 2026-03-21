@@ -1753,8 +1753,7 @@ function HomeSection({ data, profile, setTab }) {
         <div style={{ textAlign: "center", paddingTop: "40px" }}>
           <div style={{ fontSize: "56px", marginBottom: "16px" }}>✨</div>
           <div style={{ color: COLORS.text, fontWeight: 700, fontSize: "18px", letterSpacing: "-0.3px" }}>Всё готово!</div>
-          <div style={{ color: COLORS.fill, fontSize: "14px", marginTop: "8px", lineHeight: "1.6" }}>Начни добавлять события,{"
-"}привычки и дни рождения</div>
+          <div style={{ color: COLORS.fill, fontSize: "14px", marginTop: "8px", lineHeight: "1.6" }}>Начни добавлять события,привычки и дни рождения</div>
         </div>
       )}
 
