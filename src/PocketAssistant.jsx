@@ -171,6 +171,21 @@ function getFirstDayOfMonth(year, month) {
 // ─── Reusable UI ─────────────────────────────────────────────────────────────
 
 function Modal({ title, onClose, children }) {
+  const [dragY, setDragY] = useState(0);
+  const [startY, setStartY] = useState(null);
+
+  function onTouchStart(e) { setStartY(e.touches[0].clientY); }
+  function onTouchMove(e) {
+    if (startY === null) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0) setDragY(dy);
+  }
+  function onTouchEnd() {
+    if (dragY > 100) { onClose(); }
+    setDragY(0);
+    setStartY(null);
+  }
+
   return (
     <div style={{
       position: "fixed", inset: 0,
@@ -178,14 +193,20 @@ function Modal({ title, onClose, children }) {
       backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
       display: "flex", alignItems: "flex-end", justifyContent: "center",
       zIndex: 1000,
-    }}>
-      <div style={{
-        background: COLORS.surface,
-        borderRadius: "20px 20px 0 0",
-        width: "100%", maxWidth: "480px",
-        maxHeight: "92vh", overflowY: "auto",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}>
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          background: COLORS.surface,
+          borderRadius: "20px 20px 0 0",
+          width: "100%", maxWidth: "480px",
+          maxHeight: "92vh", overflowY: "auto",
+          paddingBottom: "env(safe-area-inset-bottom)",
+          transform: `translateY(${dragY}px)`,
+          transition: dragY === 0 ? "transform 0.3s ease" : "none",
+        }}>
         {/* iOS drag handle */}
         <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
           <div style={{ width: "36px", height: "4px", background: COLORS.fill, borderRadius: "2px", opacity: 0.5 }} />
@@ -965,6 +986,39 @@ function DiarySection({ data, setData }) {
 
 // ─── TOP LISTS ────────────────────────────────────────────────────────────────
 
+const MOVIE_GENRES = [
+  { value: "action",      label: "Боевик",          emoji: "💥" },
+  { value: "comedy",      label: "Комедия",          emoji: "😂" },
+  { value: "drama",       label: "Драма",            emoji: "🎭" },
+  { value: "thriller",    label: "Триллер",          emoji: "😰" },
+  { value: "horror",      label: "Ужасы",            emoji: "👻" },
+  { value: "scifi",       label: "Фантастика",       emoji: "🚀" },
+  { value: "fantasy",     label: "Фэнтези",          emoji: "🧙" },
+  { value: "romance",     label: "Романтика",        emoji: "💕" },
+  { value: "animation",   label: "Анимация",         emoji: "🎨" },
+  { value: "documentary", label: "Документальный",   emoji: "🎥" },
+  { value: "biography",   label: "Биография",        emoji: "👤" },
+  { value: "history",     label: "Исторический",     emoji: "🏛" },
+  { value: "crime",       label: "Криминал",         emoji: "🔫" },
+  { value: "mystery",     label: "Мистика",          emoji: "🔮" },
+  { value: "adventure",   label: "Приключения",      emoji: "🗺" },
+  { value: "family",      label: "Семейный",         emoji: "👨‍👩‍👧" },
+  { value: "sport",       label: "Спорт",            emoji: "⚽" },
+  { value: "music",       label: "Музыкальный",      emoji: "🎵" },
+  { value: "war",         label: "Военный",          emoji: "⚔️" },
+  { value: "western",     label: "Вестерн",          emoji: "🤠" },
+  { value: "psychology",  label: "Психология",       emoji: "🧠" },
+  { value: "esoterics",   label: "Эзотерика",        emoji: "🌙" },
+  { value: "conspiracy",  label: "Теория заговора",  emoji: "👁" },
+  { value: "health",      label: "ЗОЖ / Здоровье",  emoji: "🥗" },
+  { value: "nature",      label: "Природа",          emoji: "🌿" },
+  { value: "science",     label: "Наука",            emoji: "🔬" },
+  { value: "society",     label: "Общество",         emoji: "🌍" },
+  { value: "spiritual",   label: "Духовность",       emoji: "☯️" },
+  { value: "anime",       label: "Аниме",            emoji: "⛩" },
+  { value: "standup",     label: "Стендап",          emoji: "🎤" },
+];
+
 const STATUS_CONFIG = {
   todo: { label: "В списке", color: COLORS.muted },
   inprogress: { label: "В процессе", color: COLORS.orange },
@@ -976,16 +1030,66 @@ function TopListsSection({ data, setData }) {
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddList, setShowAddList] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null); // {listId, itemId, title}
-  const [itemForm, setItemForm] = useState({ title: "", status: "todo", totalPages: "", readPages: "", season: "", episode: "", isSeries: false, country: "", city: "", placeType: "", notes: "" });
+  const [itemForm, setItemForm] = useState({ title: "", status: "todo", rating: 0, genre: "", totalPages: "", readPages: "", season: "", episode: "", isSeries: false, country: "", city: "", placeType: "", notes: "" });
   const [newListTitle, setNewListTitle] = useState("");
+  const [showCommunityTop, setShowCommunityTop] = useState(false);
+  const [communityTop, setCommunityTop] = useState([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
 
   const list = data.topLists.find(l => l.id === activeList);
+
+  // Load community top from Firestore
+  async function loadCommunityTop() {
+    setCommunityLoading(true);
+    setCommunityTop([]);
+    try {
+      // Aggregate ratings: each user stores their movies in data/{uid}
+      // We read from a shared "community" collection that gets updated on save
+      const snap = await getDoc(doc(db, "community", "movies_top"));
+      if (snap.exists()) {
+        const d = snap.data();
+        const items = Object.entries(d.ratings || {}).map(([title, info]) => ({
+          title,
+          avg: info.total / info.votes,
+          votes: info.votes,
+          genre: info.genre || "",
+        })).filter(i => i.votes >= 1 && i.avg > 0)
+          .sort((a, b) => b.avg - a.avg || b.votes - a.votes)
+          .slice(0, 20);
+        setCommunityTop(items);
+      }
+    } catch {}
+    setCommunityLoading(false);
+  }
+
+  // Save movie rating to community Firestore doc
+  async function saveToCommunity(item) {
+    if (!item.rating || item.rating === 0) return;
+    try {
+      const ref = doc(db, "community", "movies_top");
+      const snap = await getDoc(ref);
+      const existing = snap.exists() ? snap.data() : { ratings: {} };
+      const prev = existing.ratings?.[item.title] || { total: 0, votes: 0, genre: item.genre || "" };
+      await setDoc(ref, {
+        ratings: {
+          ...existing.ratings,
+          [item.title]: {
+            total: prev.total + item.rating,
+            votes: prev.votes + 1,
+            genre: item.genre || prev.genre,
+          }
+        }
+      }, { merge: true });
+    } catch {}
+  }
 
   function addItem() {
     if (!itemForm.title.trim()) return;
     const item = { id: Date.now(), ...itemForm };
     setData(d => ({ ...d, topLists: d.topLists.map(l => l.id === activeList ? { ...l, items: [...l.items, item] } : l) }));
-    setItemForm({ title: "", status: "todo", totalPages: "", readPages: "", season: "", episode: "", isSeries: false, country: "", city: "", placeType: "", notes: "" });
+    // Save to community ratings if it's a movie/series with rating
+    if (isMovies && item.rating > 0) saveToCommunity(item);
+    setItemForm({ title: "", status: "todo", rating: 0, genre: "", totalPages: "", readPages: "", season: "", episode: "", isSeries: false, country: "", city: "", placeType: "", notes: "" });
     setShowAddItem(false);
   }
 
@@ -1046,7 +1150,12 @@ function TopListsSection({ data, setData }) {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <span style={{ color: COLORS.muted, fontSize: "13px" }}>{list.items.length} позиций · {list.items.filter(i => i.status === "done").length} завершено</span>
-            <Btn small onClick={() => setShowAddItem(true)}>+ Добавить</Btn>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {isMovies && (
+                <Btn small variant="tint" color={COLORS.yellow} onClick={() => { loadCommunityTop(); setShowCommunityTop(true); }}>🌍 Общий</Btn>
+              )}
+              <Btn small onClick={() => setShowAddItem(true)}>+ Добавить</Btn>
+            </div>
           </div>
           {list.items.length === 0 ? (
             <div style={{ color: COLORS.dimmed, textAlign: "center", padding: "40px 0", fontSize: "14px" }}>Список пуст</div>
@@ -1086,6 +1195,22 @@ function TopListsSection({ data, setData }) {
                     </div>
                   );
                 })()}
+                {/* Rating stars */}
+                {item.rating > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "8px" }}>
+                    {Array.from({ length: 10 }, (_, i) => (
+                      <span key={i} style={{ fontSize: "12px", opacity: i < item.rating ? 1 : 0.2 }}>⭐</span>
+                    ))}
+                    <span style={{ color: COLORS.fill, fontSize: "12px", marginLeft: "2px" }}>{item.rating}/10</span>
+                  </div>
+                )}
+                {/* Genre */}
+                {item.genre && (() => {
+                  const g = MOVIE_GENRES.find(g => g.value === item.genre);
+                  return g ? (
+                    <span style={{ display: "inline-block", background: `${COLORS.purple}22`, color: COLORS.purple, borderRadius: "6px", padding: "2px 8px", fontSize: "11px", fontWeight: 600, marginTop: "6px" }}>{g.emoji} {g.label}</span>
+                  ) : null;
+                })()}
                 {item.notes && <div style={{ color: COLORS.muted, fontSize: "12px", marginTop: "8px", fontStyle: "italic" }}>"{item.notes}"</div>}
               </div>
             );
@@ -1114,11 +1239,12 @@ function TopListsSection({ data, setData }) {
 
           {isMovies && (
             <>
+              {/* Type */}
               <div style={{ marginBottom: "14px" }}>
-                <label style={{ color: COLORS.muted, fontSize: "12px", display: "block", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Тип</label>
+                <label style={{ color: COLORS.textSec, fontSize: "13px", fontWeight: 500, display: "block", marginBottom: "7px" }}>Тип</label>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => setItemForm(f => ({ ...f, isSeries: false, season: "", episode: "" }))} style={{ flex: 1, background: !itemForm.isSeries ? `${COLORS.accent}33` : COLORS.surface, border: `1px solid ${!itemForm.isSeries ? COLORS.accent : COLORS.border}`, color: !itemForm.isSeries ? COLORS.accent : COLORS.muted, borderRadius: "8px", padding: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>🎬 Фильм</button>
-                  <button onClick={() => setItemForm(f => ({ ...f, isSeries: true }))} style={{ flex: 1, background: itemForm.isSeries ? `${COLORS.blue}33` : COLORS.surface, border: `1px solid ${itemForm.isSeries ? COLORS.blue : COLORS.border}`, color: itemForm.isSeries ? COLORS.blue : COLORS.muted, borderRadius: "8px", padding: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>📺 Сериал</button>
+                  <button onClick={() => setItemForm(f => ({ ...f, isSeries: false, season: "", episode: "" }))} style={{ flex: 1, background: !itemForm.isSeries ? `${COLORS.accent}33` : COLORS.card, border: `1px solid ${!itemForm.isSeries ? COLORS.accent : COLORS.border}`, color: !itemForm.isSeries ? COLORS.accent : COLORS.muted, borderRadius: "10px", padding: "10px", cursor: "pointer", fontWeight: 600, fontSize: "14px", fontFamily: "inherit" }}>🎬 Фильм</button>
+                  <button onClick={() => setItemForm(f => ({ ...f, isSeries: true }))} style={{ flex: 1, background: itemForm.isSeries ? `${COLORS.blue}33` : COLORS.card, border: `1px solid ${itemForm.isSeries ? COLORS.blue : COLORS.border}`, color: itemForm.isSeries ? COLORS.blue : COLORS.muted, borderRadius: "10px", padding: "10px", cursor: "pointer", fontWeight: 600, fontSize: "14px", fontFamily: "inherit" }}>📺 Сериал</button>
                 </div>
               </div>
               {itemForm.isSeries && (
@@ -1127,6 +1253,42 @@ function TopListsSection({ data, setData }) {
                   <Input label="Серия" type="number" value={itemForm.episode} onChange={e => setItemForm(f => ({ ...f, episode: e.target.value }))} placeholder="5" />
                 </div>
               )}
+
+              {/* Rating 0-10 */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ color: COLORS.textSec, fontSize: "13px", fontWeight: 500, display: "block", marginBottom: "10px" }}>
+                  Оценка — {itemForm.rating > 0 ? `${itemForm.rating}/10` : "не указана"}
+                </label>
+                <div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <button key={i+1} onClick={() => setItemForm(f => ({ ...f, rating: f.rating === i+1 ? 0 : i+1 }))} style={{
+                      background: "none", border: "none", cursor: "pointer", padding: "2px",
+                      fontSize: "22px", opacity: i < itemForm.rating ? 1 : 0.2,
+                      transform: i < itemForm.rating ? "scale(1.1)" : "scale(1)",
+                      transition: "all 0.1s",
+                    }}>⭐</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Genre */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ color: COLORS.textSec, fontSize: "13px", fontWeight: 500, display: "block", marginBottom: "8px" }}>Жанр</label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px", maxHeight: "200px", overflowY: "auto" }}>
+                  {MOVIE_GENRES.map(g => (
+                    <button key={g.value} onClick={() => setItemForm(f => ({ ...f, genre: f.genre === g.value ? "" : g.value }))} style={{
+                      background: itemForm.genre === g.value ? `${COLORS.purple}33` : COLORS.card,
+                      border: `1px solid ${itemForm.genre === g.value ? COLORS.purple : COLORS.border}`,
+                      color: itemForm.genre === g.value ? COLORS.purple : COLORS.textSec,
+                      borderRadius: "8px", padding: "7px 8px", cursor: "pointer",
+                      fontSize: "12px", fontWeight: 500, textAlign: "left",
+                      display: "flex", alignItems: "center", gap: "5px", fontFamily: "inherit",
+                    }}>
+                      <span>{g.emoji}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
@@ -1172,6 +1334,48 @@ function TopListsSection({ data, setData }) {
         <Modal title="Новый список" onClose={() => setShowAddList(false)}>
           <Input label="Название" value={newListTitle} onChange={e => setNewListTitle(e.target.value)} placeholder="Топ сериалов, Топ ресторанов..." />
           <Btn onClick={addList} style={{ width: "100%" }}>Создать</Btn>
+        </Modal>
+      )}
+
+      {/* Community Top Modal */}
+      {showCommunityTop && (
+        <Modal title="🌍 Общий топ" onClose={() => setShowCommunityTop(false)}>
+          <div style={{ color: COLORS.fill, fontSize: "13px", marginBottom: "16px" }}>
+            Средние оценки всех пользователей
+          </div>
+          {communityLoading ? (
+            <div style={{ textAlign: "center", padding: "24px", color: COLORS.fill }}>Загрузка...</div>
+          ) : communityTop.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "24px", color: COLORS.fill }}>Пока нет оценок</div>
+          ) : communityTop.map((item, i) => {
+            const g = MOVIE_GENRES.find(g => g.value === item.genre);
+            return (
+              <div key={item.title} style={{
+                display: "flex", alignItems: "center", gap: "12px",
+                padding: "12px 0",
+                borderBottom: i < communityTop.length - 1 ? `0.5px solid ${COLORS.border}` : "none",
+              }}>
+                <div style={{
+                  width: "32px", height: "32px", borderRadius: "8px",
+                  background: i === 0 ? `${COLORS.yellow}33` : i === 1 ? `${COLORS.fill}22` : `${COLORS.orange}22`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "16px", fontWeight: 800, color: i === 0 ? COLORS.yellow : i === 1 ? COLORS.fill : COLORS.orange,
+                  flexShrink: 0,
+                }}>{i + 1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: COLORS.text, fontSize: "14px", fontWeight: 600, letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "3px" }}>
+                    {g && <span style={{ color: COLORS.purple, fontSize: "11px" }}>{g.emoji} {g.label}</span>}
+                    <span style={{ color: COLORS.fill, fontSize: "11px" }}>{item.votes} оценок</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
+                  <span style={{ fontSize: "14px" }}>⭐</span>
+                  <span style={{ color: COLORS.yellow, fontWeight: 700, fontSize: "16px" }}>{item.avg.toFixed(1)}</span>
+                </div>
+              </div>
+            );
+          })}
         </Modal>
       )}
     </div>
@@ -2229,11 +2433,12 @@ function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = fals
 
 
 const TABS = [
-  { id: "home",      label: "Главная",   icon: "🏠" },
-  { id: "calendar",  label: "Календарь", icon: "📅" },
-  { id: "diary",     label: "Дневник",   icon: "📔" },
-  { id: "habits",    label: "Привычки",  icon: "🔥" },
-  { id: "birthdays", label: "ДР",        icon: "🎂" },
+  { id: "home",      label: "Главная",  icon: "🏠" },
+  { id: "calendar",  label: "Календарь",icon: "📅" },
+  { id: "diary",     label: "Дневник",  icon: "📔" },
+  { id: "habits",    label: "Привычки", icon: "🔥" },
+  { id: "birthdays", label: "ДР",       icon: "🎂" },
+  { id: "top",       label: "Топ",      icon: "⭐" },
 ];
 
 export default function App() {
