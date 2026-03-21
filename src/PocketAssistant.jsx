@@ -1,34 +1,91 @@
 /* eslint-disable */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { auth as fbAuth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 
-const COLORS = {
-  bg:          "#000000",          // true iOS black
-  surface:     "#1c1c1e",          // iOS grouped bg
-  card:        "#2c2c2e",          // iOS card
-  cardElev:    "#3a3a3c",          // elevated card
-  border:      "#38383a",          // iOS separator
-  accent:      "#0a84ff",          // iOS blue
+const DARK_COLORS = {
+  bg:          "#000000",
+  surface:     "#1c1c1e",
+  card:        "#2c2c2e",
+  cardElev:    "#3a3a3c",
+  border:      "#38383a",
+  accent:      "#0a84ff",
   accentGlow:  "#0a84ff30",
-  green:       "#30d158",          // iOS green
-  red:         "#ff453a",          // iOS red
-  orange:      "#ff9f0a",          // iOS orange
-  yellow:      "#ffd60a",          // iOS yellow
+  green:       "#30d158",
+  red:         "#ff453a",
+  orange:      "#ff9f0a",
+  yellow:      "#ffd60a",
   blue:        "#0a84ff",
-  teal:        "#5ac8f5",          // iOS teal
-  pink:        "#ff375f",          // iOS pink
-  purple:      "#bf5af2",          // iOS purple
+  teal:        "#5ac8f5",
+  pink:        "#ff375f",
+  purple:      "#bf5af2",
   text:        "#ffffff",
-  textSec:     "#ebebf599",        // iOS secondary label
-  muted:       "#ebebf54d",        // iOS tertiary label
+  textSec:     "#ebebf5cc",
+  muted:       "#ebebf566",
   dimmed:      "#ffffff1a",
-  fill:        "#787880",          // iOS fill
+  fill:        "#8e8e93",
 };
 
+const LIGHT_COLORS = {
+  bg:          "#f2f2f7",
+  surface:     "#ffffff",
+  card:        "#ffffff",
+  cardElev:    "#f2f2f7",
+  border:      "#c6c6c8",
+  accent:      "#007aff",
+  accentGlow:  "#007aff20",
+  green:       "#34c759",
+  red:         "#ff3b30",
+  orange:      "#ff9500",
+  yellow:      "#ffcc00",
+  blue:        "#007aff",
+  teal:        "#32ade6",
+  pink:        "#ff2d55",
+  purple:      "#af52de",
+  text:        "#000000",
+  textSec:     "#3c3c4399",
+  muted:       "#3c3c4344",
+  dimmed:      "#00000012",
+  fill:        "#8e8e93",
+};
+
+// Theme is set at runtime — default dark
+let COLORS = DARK_COLORS;
+
 const STORAGE_KEY = "pocket_assistant_data_v2";
+
+// ─── SWIPE BACK HOOK ──────────────────────────────────────────────────────────
+function useSwipeBack(onBack, enabled = true) {
+  const startX = useRef(null);
+  const startY = useRef(null);
+
+  const onTouchStart = useCallback((e) => {
+    const touch = e.touches[0];
+    // Only trigger if touch starts within 30px of left edge
+    if (touch.clientX <= 30) {
+      startX.current = touch.clientX;
+      startY.current = touch.clientY;
+    } else {
+      startX.current = null;
+    }
+  }, []);
+
+  const onTouchEnd = useCallback((e) => {
+    if (startX.current === null || !enabled) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - startX.current;
+    const dy = Math.abs(touch.clientY - startY.current);
+    // Swipe right > 80px and mostly horizontal
+    if (dx > 80 && dy < 80) {
+      onBack();
+    }
+    startX.current = null;
+  }, [onBack, enabled]);
+
+  return { onTouchStart, onTouchEnd };
+}
 
 const defaultData = {
   events: [],
@@ -439,7 +496,7 @@ function DayView({ date, events, birthdays, onAdd, onEdit, onDelete, onBack }) {
   const allEventsMap = Object.fromEntries(events.map(e => [e.id, e]));
 
   return (
-      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
+      <div {...swipeBack} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
         <button onClick={onBack} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px" }}>← Назад</button>
         <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "16px", flex: 1 }}>
@@ -559,7 +616,7 @@ function WeekView({ weekStart, events, onDayClick, onBack }) {
   });
 
   return (
-      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
+      <div {...swipeBack} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
         <button onClick={onBack} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px" }}>← Назад</button>
         <span style={{ color: COLORS.text, fontWeight: 700, fontSize: "14px", flex: 1 }}>
@@ -984,6 +1041,107 @@ function DiarySection({ data, setData }) {
   );
 }
 
+// ─── TMDB SEARCH COMPONENT ───────────────────────────────────────────────────
+
+const TMDB_KEY = "YOUR_TMDB_KEY"; // замени на свой ключ с themoviedb.org
+
+function TmdbSearch({ query, onSelect }) {
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState("");
+
+  async function search() {
+    if (!query.trim() || TMDB_KEY === "YOUR_TMDB_KEY") return;
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}&language=ru-RU&page=1`
+      );
+      const data = await res.json();
+      const items = (data.results || [])
+        .filter(r => r.media_type === "movie" || r.media_type === "tv")
+        .slice(0, 5);
+      setResults(items);
+      setSearched(query);
+    } catch {}
+    setLoading(false);
+  }
+
+  async function selectItem(item) {
+    const isTV = item.media_type === "tv";
+    const title = isTV ? item.name : item.title;
+    const year = (isTV ? item.first_air_date : item.release_date)?.slice(0, 4) || "";
+    const poster = item.poster_path ? `https://image.tmdb.org/t/p/w300${item.poster_path}` : null;
+    const description = item.overview || "";
+
+    // Fetch credits for actors
+    let actors = "";
+    try {
+      const credits = await fetch(
+        `https://api.themoviedb.org/3/${isTV ? "tv" : "movie"}/${item.id}/credits?api_key=${TMDB_KEY}&language=ru-RU`
+      );
+      const cd = await credits.json();
+      actors = (cd.cast || []).slice(0, 4).map(a => a.name).join(", ");
+    } catch {}
+
+    // Map TMDB genre to our genres
+    const tmdbGenreMap = {18:"drama",28:"action",35:"comedy",27:"horror",878:"scifi",14:"fantasy",10749:"romance",16:"animation",99:"documentary",36:"history",80:"crime",9648:"mystery",12:"adventure",10751:"family",10402:"music",10752:"war",37:"western"};
+    const firstGenre = item.genre_ids?.[0];
+    const genre = tmdbGenreMap[firstGenre] || "";
+
+    onSelect({ title, poster, description, year, actors, genre });
+    setResults([]);
+  }
+
+  if (TMDB_KEY === "YOUR_TMDB_KEY") return null;
+
+  return (
+    <div style={{ marginBottom: "16px" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+        <button onClick={search} disabled={loading || !query.trim()} style={{
+          background: loading ? COLORS.card : `${COLORS.teal}22`,
+          border: `1px solid ${COLORS.teal}44`, color: COLORS.teal,
+          borderRadius: "10px", padding: "9px 14px", fontSize: "13px",
+          fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+          opacity: !query.trim() ? 0.5 : 1,
+        }}>
+          {loading ? "Ищу..." : "🔍 Найти в TMDB"}
+        </button>
+        {searched && <span style={{ color: COLORS.fill, fontSize: "12px", alignSelf: "center" }}>по: «{searched}»</span>}
+      </div>
+      {results.length > 0 && (
+        <div style={{ background: COLORS.card, borderRadius: "12px", border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+          {results.map((r, i) => {
+            const isTV = r.media_type === "tv";
+            const title = isTV ? r.name : r.title;
+            const year = (isTV ? r.first_air_date : r.release_date)?.slice(0, 4);
+            const poster = r.poster_path ? `https://image.tmdb.org/t/p/w92${r.poster_path}` : null;
+            return (
+              <button key={r.id} onClick={() => selectItem(r)} style={{
+                width: "100%", background: "none", border: "none",
+                borderBottom: i < results.length - 1 ? `0.5px solid ${COLORS.border}` : "none",
+                padding: "10px 12px", cursor: "pointer", fontFamily: "inherit",
+                display: "flex", alignItems: "center", gap: "10px", textAlign: "left",
+              }}>
+                {poster
+                  ? <img src={poster} alt="" style={{ width: "32px", height: "48px", borderRadius: "4px", objectFit: "cover", flexShrink: 0 }} />
+                  : <div style={{ width: "32px", height: "48px", borderRadius: "4px", background: COLORS.surface, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>{isTV ? "📺" : "🎬"}</div>
+                }
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: COLORS.text, fontSize: "14px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
+                  <div style={{ color: COLORS.fill, fontSize: "12px", marginTop: "2px" }}>{isTV ? "📺 Сериал" : "🎬 Фильм"}{year ? ` · ${year}` : ""}</div>
+                </div>
+                <span style={{ color: COLORS.accent, fontSize: "12px" }}>↑ взять</span>
+              </button>
+            );
+          })}
+          <button onClick={() => setResults([])} style={{ width: "100%", background: "none", border: "none", color: COLORS.fill, padding: "8px", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}>✕ Закрыть</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── TOP LISTS ────────────────────────────────────────────────────────────────
 
 const MOVIE_GENRES = [
@@ -1035,6 +1193,7 @@ function TopListsSection({ data, setData }) {
   const [showCommunityTop, setShowCommunityTop] = useState(false);
   const [communityTop, setCommunityTop] = useState([]);
   const [communityLoading, setCommunityLoading] = useState(false);
+  const [editItem, setEditItem] = useState(null); // item being edited
 
   const list = data.topLists.find(l => l.id === activeList);
 
@@ -1091,6 +1250,27 @@ function TopListsSection({ data, setData }) {
     if (isMovies && item.rating > 0) saveToCommunity(item);
     setItemForm({ title: "", status: "todo", rating: 0, genre: "", totalPages: "", readPages: "", season: "", episode: "", isSeries: false, country: "", city: "", placeType: "", notes: "" });
     setShowAddItem(false);
+  }
+
+  function updateItem() {
+    if (!itemForm.title.trim() || !editItem) return;
+    setData(d => ({
+      ...d,
+      topLists: d.topLists.map(l => l.id === activeList ? {
+        ...l,
+        items: l.items.map(it => it.id === editItem.id ? { ...it, ...itemForm } : it)
+      } : l)
+    }));
+    if (isMovies && itemForm.rating > 0) saveToCommunity(itemForm);
+    setEditItem(null);
+    setShowAddItem(false);
+    setItemForm({ title: "", status: "todo", rating: 0, genre: "", totalPages: "", readPages: "", season: "", episode: "", isSeries: false, country: "", city: "", placeType: "", notes: "" });
+  }
+
+  function openEdit(item) {
+    setItemForm({ ...item });
+    setEditItem(item);
+    setShowAddItem(true);
   }
 
   function toggleStatus(listId, itemId) {
@@ -1162,16 +1342,20 @@ function TopListsSection({ data, setData }) {
           ) : list.items.map((item, idx) => {
             const sc = STATUS_CONFIG[item.status] || STATUS_CONFIG.todo;
             return (
-              <div key={item.id} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: "14px", padding: "14px", marginBottom: "10px" }}>
+              <div key={item.id} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: "14px", padding: "14px", marginBottom: "10px", display: "flex", gap: "10px" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <span style={{ color: COLORS.dimmed, fontSize: "12px", fontWeight: 700 }}>#{idx + 1}</span>
                       <span style={{ color: item.status === "done" ? COLORS.muted : COLORS.text, fontWeight: 600, fontSize: "14px", textDecoration: item.status === "done" ? "line-through" : "none" }}>{item.title}</span>
                     </div>
                     <button onClick={() => toggleStatus(list.id, item.id)} style={{ background: `${sc.color}22`, border: "none", color: sc.color, borderRadius: "6px", padding: "3px 8px", fontSize: "11px", cursor: "pointer", marginTop: "6px", fontWeight: 600 }}>{sc.label}</button>
                   </div>
-                  <button onClick={() => setConfirmDelete({ listId: list.id, itemId: item.id, title: item.title })} style={{ background: "none", border: "none", color: COLORS.dimmed, cursor: "pointer" }}>🗑</button>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <button onClick={() => openEdit(item)} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.fill, borderRadius: "8px", width: "30px", height: "30px", cursor: "pointer", fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center" }}>✏️</button>
+                    <button onClick={() => setConfirmDelete({ listId: list.id, itemId: item.id, title: item.title })} style={{ background: "none", border: "none", color: COLORS.dimmed, cursor: "pointer", fontSize: "16px" }}>🗑</button>
+                  </div>
                 </div>
                 {(item.totalPages || item.readPages) && (
                   <div style={{ marginTop: "10px" }}>
@@ -1211,15 +1395,25 @@ function TopListsSection({ data, setData }) {
                     <span style={{ display: "inline-block", background: `${COLORS.purple}22`, color: COLORS.purple, borderRadius: "6px", padding: "2px 8px", fontSize: "11px", fontWeight: 600, marginTop: "6px" }}>{g.emoji} {g.label}</span>
                   ) : null;
                 })()}
+                {item.tmdbDescription && (
+                  <div style={{ color: COLORS.fill, fontSize: "12px", marginTop: "8px", lineHeight: "1.5", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.tmdbDescription}</div>
+                )}
+                {item.tmdbActors && (
+                  <div style={{ color: COLORS.muted, fontSize: "11px", marginTop: "4px" }}>🎭 {item.tmdbActors}</div>
+                )}
                 {item.notes && <div style={{ color: COLORS.muted, fontSize: "12px", marginTop: "8px", fontStyle: "italic" }}>"{item.notes}"</div>}
               </div>
+              {item.tmdbPoster && (
+                <img src={item.tmdbPoster} alt={item.title} style={{ width: "56px", height: "84px", borderRadius: "8px", objectFit: "cover", flexShrink: 0, alignSelf: "flex-start" }} />
+              )}
+            </div>
             );
           })}
         </>
       )}
 
       {showAddItem && (
-        <Modal title={`Добавить в ${list?.title}`} onClose={() => setShowAddItem(false)}>
+        <Modal title={editItem ? `✏️ Редактировать` : `Добавить в ${list?.title}`} onClose={() => { setShowAddItem(false); setEditItem(null); setItemForm({ title: "", status: "todo", rating: 0, genre: "", totalPages: "", readPages: "", season: "", episode: "", isSeries: false, country: "", city: "", placeType: "", notes: "" }); }}>
           <Input label="Название" value={itemForm.title} onChange={e => setItemForm(f => ({ ...f, title: e.target.value }))} placeholder="Название..." />
           <div style={{ marginBottom: "14px" }}>
             <label style={{ color: COLORS.muted, fontSize: "12px", display: "block", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Статус</label>
@@ -1239,6 +1433,18 @@ function TopListsSection({ data, setData }) {
 
           {isMovies && (
             <>
+              <TmdbSearch
+                query={itemForm.title}
+                onSelect={info => setItemForm(f => ({
+                  ...f,
+                  title: info.title,
+                  tmdbPoster: info.poster,
+                  tmdbDescription: info.description,
+                  tmdbYear: info.year,
+                  tmdbActors: info.actors,
+                  genre: info.genre || f.genre,
+                }))}
+              />
               {/* Type */}
               <div style={{ marginBottom: "14px" }}>
                 <label style={{ color: COLORS.textSec, fontSize: "13px", fontWeight: 500, display: "block", marginBottom: "7px" }}>Тип</label>
@@ -1318,7 +1524,7 @@ function TopListsSection({ data, setData }) {
           )}
 
           <Textarea label="Краткий вывод" value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} placeholder={isMovies ? "Впечатления, рекомендую ли..." : isBooks ? "Главная мысль, понравилось ли..." : isTravel ? "Что запомнилось, стоит ли посетить..." : "Комментарий..."} />
-          <Btn onClick={addItem} style={{ width: "100%" }}>Добавить</Btn>
+          <Btn onClick={editItem ? updateItem : addItem} style={{ width: "100%" }}>{editItem ? "Сохранить изменения" : "Добавить"}</Btn>
         </Modal>
       )}
 
@@ -1387,6 +1593,7 @@ function TopListsSection({ data, setData }) {
 // ─── HABIT DETAIL VIEW ────────────────────────────────────────────────────────
 
 function HabitDetail({ habit, onBack, onToggle, onDelete }) {
+  const swipeBack = useSwipeBack(onBack);
   const todayStr = today();
   const isGood = habit.type === "good";
   const color = isGood ? COLORS.green : COLORS.red;
@@ -1422,7 +1629,7 @@ function HabitDetail({ habit, onBack, onToggle, onDelete }) {
   const todayFmt = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 
   return (
-      <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
+      <div {...swipeBack} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
         <button onClick={onBack} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "14px" }}>← Назад</button>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
@@ -2315,6 +2522,7 @@ function AuthScreen({ onAuth }) {
 const GENDER_OPTIONS = ["Мужской", "Женской", "Предпочитаю не указывать"];
 
 function ProfileScreen({ auth, profile, onSave, onSkip, onLogout, isSetup = false }) {
+  const swipeBack = useSwipeBack(onSkip, !isSetup);
   const [form, setForm] = useState({
     firstName: profile?.firstName || "",
     lastName: profile?.lastName || "",
@@ -2448,6 +2656,16 @@ export default function App() {
   const [tab, setTab] = useState("home");
   const [data, setDataRaw] = useState(loadData);
   const [syncing, setSyncing] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem("pocket_theme") || "dark");
+
+  // Apply theme globally
+  COLORS = theme === "light" ? LIGHT_COLORS : DARK_COLORS;
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("pocket_theme", next);
+  }
 
   // ── Firestore data sync ───────────────────────────────────────────────────
   // Write data to both localStorage and Firestore
@@ -2557,7 +2775,7 @@ export default function App() {
   // Loading splash
   if (screen === "loading") return (
     <div style={{
-      height: "100dvh", background: COLORS.bg,
+      height: "100dvh", background: theme === "light" ? LIGHT_COLORS.bg : DARK_COLORS.bg,
       display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "20px",
       fontFamily: "-apple-system, 'SF Pro Display', system-ui, sans-serif",
     }}>
@@ -2601,6 +2819,7 @@ export default function App() {
       color: COLORS.text,
       fontFamily: "-apple-system, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif",
       WebkitFontSmoothing: "antialiased",
+      colorScheme: theme,
       display: "flex",
       flexDirection: "column",
       height: "100dvh",
@@ -2632,6 +2851,10 @@ export default function App() {
               {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
             </div>
           </div>
+          <button onClick={toggleTheme} style={{
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: "18px", padding: "4px", flexShrink: 0,
+          }}>{theme === "dark" ? "☀️" : "🌙"}</button>
           <button onClick={() => setScreen("profile")} style={{
             width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0,
             background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.purple})`,
@@ -2654,6 +2877,7 @@ export default function App() {
         boxSizing: "border-box",
         minWidth: 0,
         background: COLORS.bg,
+        transition: "background 0.2s ease",
       }}>
         {tab === "home" && <HomeSection data={data} profile={profile} setTab={setTab} />}
         {tab === "calendar" && <CalendarSection data={data} setData={setData} />}
