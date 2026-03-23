@@ -1043,7 +1043,7 @@ function DiarySection({ data, setData }) {
 
 // ─── TMDB SEARCH COMPONENT ───────────────────────────────────────────────────
 
-const TMDB_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxYTI3NWI1MzM0M2VlYmNlNDgyNjZjZTBkZTRiNjY3ZCIsIm5iZiI6MTc3NDExMDQ3Mi4zMzc5OTk4LCJzdWIiOiI2OWJlYzcwOGMzZDIyYzI5ZGM0MzA0NzgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.vyY5oaZ-V2edvuXA07Cr-oIbyk-NllRDxXLFrJdDAY0"; // замени на свой ключ с themoviedb.org
+const TMDB_KEY = "YOUR_TMDB_KEY"; // замени на свой ключ с themoviedb.org
 
 function TmdbSearch({ query, onSelect }) {
   const [results, setResults] = useState([]);
@@ -1051,11 +1051,12 @@ function TmdbSearch({ query, onSelect }) {
   const [searched, setSearched] = useState("");
 
   async function search() {
-    if (!query.trim() || TMDB_KEY === "YOUR_TMDB_KEY") return;
+    if (!query.trim() || TMDB_KEY === "YOUR_TMDB_KEY" || TMDB_KEY.length < 10) return;
     setLoading(true);
     try {
       const res = await fetch(
-        `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}&language=ru-RU&page=1`
+        `https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(query)}&language=ru-RU&page=1`,
+        { headers: { Authorization: `Bearer ${TMDB_KEY}`, "Content-Type": "application/json" } }
       );
       const data = await res.json();
       const items = (data.results || [])
@@ -1078,7 +1079,8 @@ function TmdbSearch({ query, onSelect }) {
     let actors = "";
     try {
       const credits = await fetch(
-        `https://api.themoviedb.org/3/${isTV ? "tv" : "movie"}/${item.id}/credits?api_key=${TMDB_KEY}&language=ru-RU`
+        `https://api.themoviedb.org/3/${isTV ? "tv" : "movie"}/${item.id}/credits?language=ru-RU`,
+        { headers: { Authorization: `Bearer ${TMDB_KEY}` } }
       );
       const cd = await credits.json();
       actors = (cd.cast || []).slice(0, 4).map(a => a.name).join(", ");
@@ -1093,7 +1095,7 @@ function TmdbSearch({ query, onSelect }) {
     setResults([]);
   }
 
-  if (TMDB_KEY === "YOUR_TMDB_KEY") return null;
+  if (TMDB_KEY === "YOUR_TMDB_KEY" || TMDB_KEY.length < 10) return null;
 
   return (
     <div style={{ marginBottom: "16px" }}>
