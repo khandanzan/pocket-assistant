@@ -1043,7 +1043,7 @@ function DiarySection({ data, setData }) {
 
 // ─── TMDB SEARCH COMPONENT ───────────────────────────────────────────────────
 
-const TMDB_KEY = "YOUR_TMDB_KEY"; // замени на свой ключ с themoviedb.org
+const TMDB_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxYTI3NWI1MzM0M2VlYmNlNDgyNjZjZTBkZTRiNjY3ZCIsIm5iZiI6MTc3NDExMDQ3Mi4zMzc5OTk4LCJzdWIiOiI2OWJlYzcwOGMzZDIyYzI5ZGM0MzA0NzgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.vyY5oaZ-V2edvuXA07Cr-oIbyk-NllRDxXLFrJdDAY0"; // замени на свой ключ с themoviedb.org
 
 function TmdbSearch({ query, onSelect }) {
   const [results, setResults] = useState([]);
